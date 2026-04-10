@@ -1,3 +1,7 @@
-package app
+package main
 
-func main() {}
+import "brook/internal"
+
+func main() {
+	internal.Server()
+}
