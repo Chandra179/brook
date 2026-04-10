@@ -1,4 +1,4 @@
-package internal
+package httpserver
 
 import (
 	"context"
@@ -17,12 +17,13 @@ func Server() {
 	globalChain := func(h http.Handler) http.Handler {
 		return middleware.Chain(h,
 			deps.Recovery(),
+			middleware.RequestID,
 			middleware.Timeout(middleware.TimeoutConfig{Duration: 30 * time.Second}),
 		)
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("POST /orders", middleware.Chain(
+	mux.Handle("POST /orders", globalChain(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusCreated)
 		}),
@@ -35,8 +36,8 @@ func Server() {
 		WriteTimeout: 35 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
-	log.Info(context.Background(), "server starting", logger.Field{Key: "addr", Value: srv.Addr})
+	log.Info(context.Background(), "http server starting", logger.Field{Key: "addr", Value: srv.Addr})
 	if err := srv.ListenAndServe(); err != nil {
-		log.Error(context.Background(), "server error", logger.Field{Key: "error", Value: err.Error()})
+		log.Error(context.Background(), "http server error", logger.Field{Key: "error", Value: err.Error()})
 	}
 }
