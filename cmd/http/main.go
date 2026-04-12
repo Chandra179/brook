@@ -1,7 +1,16 @@
 package main
 
-import "brook/internal/httpserver"
+import (
+	"log"
+
+	"brook/config"
+	"brook/internal/httpserver"
+)
 
 func main() {
-	httpserver.Server()
+	cfg, err := config.Load("config/config.yaml")
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+	httpserver.Server(cfg)
 }

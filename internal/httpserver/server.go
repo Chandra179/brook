@@ -3,22 +3,22 @@ package httpserver
 import (
 	"context"
 	"net/http"
-	"time"
 
+	"brook/config"
 	"brook/internal/middleware"
 
 	"github.com/Chandra179/gosdk/logger"
 )
 
-func Server() {
-	log := logger.NewLogger("dev")
+func Server(cfg *config.Config) {
+	log := logger.NewLogger(cfg.Middleware.Logger.Level)
 	deps := middleware.NewDependencies(log)
 
 	globalChain := func(h http.Handler) http.Handler {
 		return middleware.Chain(h,
 			deps.Recovery(),
 			middleware.RequestID,
-			middleware.Timeout(middleware.TimeoutConfig{Duration: 30 * time.Second}),
+			middleware.Timeout(middleware.TimeoutConfig{Duration: cfg.Middleware.Timeout}),
 		)
 	}
 
@@ -30,11 +30,11 @@ func Server() {
 	))
 
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         cfg.HTTP.Addr,
 		Handler:      globalChain(mux),
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 35 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  cfg.HTTP.ReadTimeout,
+		WriteTimeout: cfg.HTTP.WriteTimeout,
+		IdleTimeout:  cfg.HTTP.IdleTimeout,
 	}
 	log.Info(context.Background(), "http server starting", logger.Field{Key: "addr", Value: srv.Addr})
 	if err := srv.ListenAndServe(); err != nil {

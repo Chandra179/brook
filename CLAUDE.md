@@ -8,8 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Vendor dependencies
 make vendor           # runs: go mod tidy && go mod vendor
 
-# Run the server
-go run cmd/app/main.go
+# Run HTTP server
+go run cmd/http/main.go
+
+# Run gRPC server
+go run cmd/grpc/main.go
 
 # Build
 go build ./...
@@ -22,25 +25,30 @@ go test ./internal/middleware/...   # test a specific package
 go test -run TestFunctionName ./internal/middleware/...
 ```
 
-The server requires `JWT_SECRET` env var at runtime.
+Config is loaded from `config/config.yaml` (HTTP addr, gRPC addr, timeouts, logger level).
 
 ## Architecture
 
-This is a Go HTTP server skeleton using only the standard library (`net/http`) plus a shared logger from `github.com/Chandra179/gosdk`.
+This is a Go skeleton with two separate server binaries (HTTP and gRPC), sharing middleware and config. Dependencies are only the standard library plus `github.com/Chandra179/gosdk` for logging.
 
-**Entry point**: `cmd/app/main.go` → `internal.Server()`
+**Entry points**:
+- `cmd/http/main.go` → `httpserver.Server(cfg)` in `internal/httpserver/server.go`
+- `cmd/grpc/main.go` → `grpcserver.Server(cfg)` in `internal/grpcserver/server.go`
 
-**`internal/server.go`** wires everything together:
-- Creates a `Dependencies` struct (holds the logger, injected into middleware that need it)
-- Builds a `globalChain` applied to all routes: Recovery → RequestID → Timeout → Logger → Auth → RateLimit
-- Per-route chains add Authorization on top (e.g., `deps.Authorization(policy, "orders", "write")`)
+**`internal/httpserver/server.go`** wires the HTTP server:
+- Creates a `Dependencies` struct (holds the logger)
+- Builds a `globalChain` applied to all routes: Recovery → RequestID → Timeout
+- Registers routes on `http.ServeMux` with per-route middleware chains on top
+
+**`internal/grpcserver/server.go`** wires the gRPC server:
+- Uses `grpc.ChainUnaryInterceptor` with `middleware.RequestIDUnaryInterceptor`
+- Register service implementations here via `pb.RegisterXxxServer(srv, &impl{})`
 
 **`internal/middleware/`** contains all middleware:
 - `chain.go` — `Chain(handler, ...Middleware)` applies middlewares outermost-first
 - `dependencies.go` — `Dependencies` struct; middleware needing shared state (logger) are methods on it
-- `context.go` — helpers to store/retrieve user ID and request ID from `context.Context`
-- `ratelimit.go` — per-key token bucket rate limiting (configurable via `RateLimitConfig`)
+- `request_id.go` — HTTP middleware + gRPC unary interceptor; propagates/generates `X-Request-ID` / `x-request-id`
 - `request_validation.go` — generic `Validate[T]` helper using struct tags
-- `logger.go`, `recovery.go`, `request_id.go`, `timeout.go` — standard middleware
+- `recovery.go`, `timeout.go` — standard HTTP middleware
 
-**Pattern**: stateless middleware (no shared deps) are plain `func(...) Middleware` constructors. Middleware needing the logger are methods on `*Dependencies`.
+**Pattern**: stateless middleware are plain `func(...) Middleware` constructors. Middleware needing the logger are methods on `*Dependencies`.
