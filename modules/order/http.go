@@ -7,39 +7,37 @@ import (
 
 	"github.com/Chandra179/gosdk/logger"
 
-	"brook/config"
 	"brook/middleware"
 )
 
 func RunHttpServer() {
-	cfg, err := config.Load("config/config.yaml")
+	cfg, err := loadConfig("config/config.yaml")
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
 
-	appLog := logger.NewLogger(cfg.Middleware.Logger.Level)
-	deps := middleware.NewDependencies(appLog)
+	deps := NewDependencies(cfg)
 
 	mux := http.NewServeMux()
 	// mux.HandleFunc("POST /orders", HandleCreateOrder)
 
 	chain := middleware.Chain(
 		mux,
-		deps.Recovery(),
+		deps.Middleware.Recovery(),
 		middleware.RequestID,
-		middleware.Timeout(middleware.TimeoutConfig{Duration: cfg.Middleware.Timeout}),
+		middleware.Timeout(middleware.TimeoutConfig{Duration: deps.Config.Middleware.Timeout}),
 	)
 
 	srv := &http.Server{
-		Addr:         cfg.HTTP.Addr,
+		Addr:         deps.Config.Order.HTTP.Addr,
 		Handler:      chain,
-		ReadTimeout:  cfg.HTTP.ReadTimeout,
-		WriteTimeout: cfg.HTTP.WriteTimeout,
-		IdleTimeout:  cfg.HTTP.IdleTimeout,
+		ReadTimeout:  deps.Config.Order.HTTP.ReadTimeout,
+		WriteTimeout: deps.Config.Order.HTTP.WriteTimeout,
+		IdleTimeout:  deps.Config.Order.HTTP.IdleTimeout,
 	}
 
-	appLog.Info(context.Background(), "starting HTTP server", logger.Field{Key: "addr", Value: cfg.HTTP.Addr})
+	deps.Logger.Info(context.Background(), "starting HTTP server", logger.Field{Key: "addr", Value: deps.Config.Order.HTTP.Addr})
 	if err := srv.ListenAndServe(); err != nil {
-		appLog.Error(context.Background(), "server error", logger.Field{Key: "error", Value: err.Error()})
+		deps.Logger.Error(context.Background(), "server error", logger.Field{Key: "error", Value: err.Error()})
 	}
 }

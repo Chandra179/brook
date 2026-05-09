@@ -13,7 +13,7 @@ Each module is a Go package under `modules/<name>/`. Module owns its domain logi
 
 | File | Purpose |
 |------|---------|
-| `entrypoint.go` | Module entrypoint — HTTP server, gRPC server, CLI runner, cron job, etc. Name reflects purpose (e.g. `http.go`, `grpc.go`, `cron.go`, `worker.go`) |
+| `http.go` | Module entrypoint — HTTP server, gRPC server, CLI runner, cron job, etc. Name reflects purpose (e.g. `http.go`, `grpc.go`, `cron.go`, `worker.go`) |
 | `<action>.go` | One file per handler/operation (e.g. `create_order.go`, `get_order.go`) |
 
 ## Conventions

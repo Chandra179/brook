@@ -1,51 +1,59 @@
-# Skeleton: Evolutionary Architecture (Golang)
+# Brook
 
-This repo is an example for golang template project, modules name, functionality is just an example
+Go modular monolith skeleton. One binary, domain modules as Go packages. Split to microservices later — not before.
 
-## Architectural Definitions
-* **Component (The App):** This entire repository is a single Component. It is an independently deployable unit that provides a set of related business capabilities.
-* **Modules (Internal Logic):** Located in `internal/modules/`, these are logical wrappers (Go packages) used to maintain high **Functional Cohesion**. 
-
-## Why this Structure?
-1.  **Modularity:** Logic is partitioned by domain (`order`, `calc`) rather than technical layers.
-2.  **Fitness Functions:** This structure allows you to write tests (e.g., using `ArchGuard` or `go-cyclomatic`) to ensure the `calc` module doesn't accidentally start importing `httpserver` logic.
-3.  **Evolutionary Path:** If the `calc` module's architecture characteristics change (e.g., it needs massive scalability), it is decoupled enough to be extracted into a separate **Architecture Quantum**.
-
-## Project Structure
+## Layout
 
 ```
-.
-├── cmd/                          # Entry points
-│   ├── http/main.go             # HTTP server binary
-│   └── grpc/main.go             # gRPC server binary
-├── internal/
-│   ├── httpserver/              # HTTP server setup
-│   │   └── server.go
-│   ├── grpcserver/              # gRPC server setup
-│   │   └── server.go
-│   ├── middleware/              # Shared middleware
-│   │   ├── chain.go             # Middleware chaining
-│   │   ├── dependencies.go      # Shared dependencies
-│   │   ├── request_id.go        # Request ID propagation
-│   │   ├── request_validation.go # Request validation helper
-│   │   ├── recovery.go          # Panic recovery
-│   │   ├── timeout.go           # Request timeout
-│   │   └── README.md
-│   └── modules/                 # Business logic (components)
-│       ├── order/               # Order module
-│       │   ├── init.go
-│       │   ├── types.go
-│       │   ├── create_order.go
-│       │   ├── get_order.go
-│       │   └── dependencies.go
-│       ├── calc/                # Calc module
-│       │   └── dependencies.go
-│       └── README.md
-├── config/
-│   ├── config.yaml             # Configuration (addresses, timeouts, logger level)
-│   └── config.go
-├── Makefile                     # Build commands
-├── go.mod & go.sum             # Dependency management
-├── CLAUDE.md                    # Claude Code instructions
-└── README.md                    # This file
+cmd/order/main.go     # entrypoint — starts HTTP + gRPC
+modules/              # domain modules
+  order/              #   order domain
+    config.go         #     module-specific config struct
+    dependencies.go   #     wire deps, load own config
+    http.go           #     HTTP handlers + route registration
+middleware/           # shared: recovery, request ID, timeout, validation
+config/               # YAML loader + config.yaml
 ```
+
+## Module pattern
+
+Each module under `modules/<name>/` is flat Go package. Owns domain logic, transport (HTTP/gRPC), DI, and config.
+
+Module defines own `Config` struct in `config.go`. Config loaded via `loadConfig(path)` in `dependencies.go` — opens YAML, unmarshals module's section. Zero import of shared `config/`.
+
+Shared `config/config.yaml` nests module sections under module key:
+
+```yaml
+order:
+  http:
+    addr: ":8080"
+    ...
+middleware:
+  timeout: 30s
+```
+
+No inter-module coupling — modules call shared infra (`middleware/`), not each other.
+
+## Config decoupling
+
+Each module owns its config shape. Means 3 lines of YAML load boilerplate per module. Tradeoff: migration = copy module dir, zero dependency on shared config types.
+
+## Commands
+
+```bash
+make vendor          # go mod tidy && go mod vendor
+go run cmd/order/main.go
+go build ./...
+go test ./modules/...
+```
+
+## State
+
+Mid-restructure. Single module (`order`). One entrypoint binary. Basic test coverage on config loading + DI wiring.
+
+## Design choices
+
+- Validation via `middleware.DecodeAndValidate[T](r)` inside handlers
+- No `internal/` sub-packages inside modules
+- Config struct per module, YAML section per module key
+- No global state — deps injected via closure or struct field
