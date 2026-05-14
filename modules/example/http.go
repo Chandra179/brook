@@ -5,9 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/Chandra179/gosdk/logger"
-
 	"brook/middleware"
+	"brook/zlogger"
 )
 
 func RunHttpServer() {
@@ -36,8 +35,8 @@ func RunHttpServer() {
 		IdleTimeout:  deps.Config.AppCfg.HTTP.IdleTimeout,
 	}
 
-	deps.Logger.Info(context.Background(), "starting HTTP server", logger.Field{Key: "addr", Value: deps.Config.AppCfg.HTTP.Addr})
+	deps.Logger.Info(context.Background(), "starting HTTP server", zlogger.Field{Key: "addr", Value: deps.Config.AppCfg.HTTP.Addr})
 	if err := srv.ListenAndServe(); err != nil {
-		deps.Logger.Error(context.Background(), "server error", logger.Field{Key: "error", Value: err.Error()})
+		deps.Logger.Error(context.Background(), "server error", zlogger.Field{Key: "error", Value: err.Error()})
 	}
 }

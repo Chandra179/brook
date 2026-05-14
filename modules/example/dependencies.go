@@ -6,13 +6,12 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"brook/middleware"
-
-	"github.com/Chandra179/gosdk/logger"
+	"brook/zlogger"
 )
 
 type Dependencies struct {
 	Config     Config
-	Logger     logger.Logger
+	Logger     *zlogger.Logger
 	Middleware *middleware.Dependencies
 }
 
@@ -30,7 +29,7 @@ func loadConfig(path string) (Config, error) {
 }
 
 func NewDependencies(cfg Config) *Dependencies {
-	log := logger.NewLogger(cfg.Middleware.Logger.Level)
+	log := zlogger.New(cfg.Middleware.Logger.Level)
 	return &Dependencies{
 		Config:     cfg,
 		Logger:     log,

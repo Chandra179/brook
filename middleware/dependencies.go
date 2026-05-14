@@ -1,13 +1,13 @@
 package middleware
 
 import (
-	"github.com/Chandra179/gosdk/logger"
+	"brook/zlogger"
 )
 
 type Dependencies struct {
-	logger logger.Logger
+	logger *zlogger.Logger
 }
 
-func NewDependencies(logger logger.Logger) *Dependencies {
+func NewDependencies(logger *zlogger.Logger) *Dependencies {
 	return &Dependencies{logger: logger}
 }
