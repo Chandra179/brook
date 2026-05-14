@@ -1,13 +1,11 @@
-order:
+example:
   http:
-    addr: ":8080"
-    read_timeout: 5s
-    write_timeout: 35s
-    idle_timeout: 120s
-  grpc:
-    addr: ":9090"
+    port: "8080"
+    read_timeout_in_second: 5
+    write_timeout_in_second: 35
+    idle_timeout_in_second: 120
 
 middleware:
-  timeout: 30s
+  timeout_in_second: 30
   logger:
     level: dev  # dev | prod

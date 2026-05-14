@@ -1,4 +1,4 @@
-package order
+package example
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func RunHttpServer() {
 	deps := NewDependencies(cfg)
 
 	mux := http.NewServeMux()
-	// mux.HandleFunc("POST /orders", HandleCreateOrder)
+	// mux.HandleFunc("POST /example", HandleCreateOrder)
 
 	chain := middleware.Chain(
 		mux,
@@ -29,14 +29,14 @@ func RunHttpServer() {
 	)
 
 	srv := &http.Server{
-		Addr:         deps.Config.Order.HTTP.Addr,
+		Addr:         deps.Config.AppCfg.HTTP.Addr,
 		Handler:      chain,
-		ReadTimeout:  deps.Config.Order.HTTP.ReadTimeout,
-		WriteTimeout: deps.Config.Order.HTTP.WriteTimeout,
-		IdleTimeout:  deps.Config.Order.HTTP.IdleTimeout,
+		ReadTimeout:  deps.Config.AppCfg.HTTP.ReadTimeout,
+		WriteTimeout: deps.Config.AppCfg.HTTP.WriteTimeout,
+		IdleTimeout:  deps.Config.AppCfg.HTTP.IdleTimeout,
 	}
 
-	deps.Logger.Info(context.Background(), "starting HTTP server", logger.Field{Key: "addr", Value: deps.Config.Order.HTTP.Addr})
+	deps.Logger.Info(context.Background(), "starting HTTP server", logger.Field{Key: "addr", Value: deps.Config.AppCfg.HTTP.Addr})
 	if err := srv.ListenAndServe(); err != nil {
 		deps.Logger.Error(context.Background(), "server error", logger.Field{Key: "error", Value: err.Error()})
 	}

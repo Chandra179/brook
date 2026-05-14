@@ -2,31 +2,29 @@ package config
 
 import (
 	"os"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	HTTP       HTTPConfig       `yaml:"http"`
-	GRPC       GRPCConfig       `yaml:"grpc"`
+	Example    ExampleConfig    `yaml:"example"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 }
 
-type HTTPConfig struct {
-	Addr         string        `yaml:"addr"`
-	ReadTimeout  time.Duration `yaml:"read_timeout"`
-	WriteTimeout time.Duration `yaml:"write_timeout"`
-	IdleTimeout  time.Duration `yaml:"idle_timeout"`
+type ExampleConfig struct {
+	HTTP HTTPConfig `yaml:"http"`
 }
 
-type GRPCConfig struct {
-	Addr string `yaml:"addr"`
+type HTTPConfig struct {
+	Port               string `yaml:"port"`
+	ReadTimeoutInSec   int    `yaml:"read_timeout_in_second"`
+	WriteTimeoutInSec  int    `yaml:"write_timeout_in_second"`
+	IdleTimeoutInSec   int    `yaml:"idle_timeout_in_second"`
 }
 
 type MiddlewareConfig struct {
-	Timeout time.Duration `yaml:"timeout"`
-	Logger  LoggerConfig  `yaml:"logger"`
+	TimeoutInSec int          `yaml:"timeout_in_second"`
+	Logger       LoggerConfig `yaml:"logger"`
 }
 
 type LoggerConfig struct {

@@ -1,12 +1,13 @@
-package order
+package example
 
 import (
 	"os"
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/Chandra179/gosdk/logger"
 	"brook/middleware"
+
+	"github.com/Chandra179/gosdk/logger"
 )
 
 type Dependencies struct {
