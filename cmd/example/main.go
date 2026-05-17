@@ -1,7 +1,7 @@
 package main
 
-import "brook/modules/order"
+import "brook/modules/example"
 
 func main() {
-	order.RunHttpServer()
+	example.RunHttpServer()
 }
