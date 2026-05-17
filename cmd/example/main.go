@@ -1,7 +1,7 @@
 package main
 
-import "brook/modules/example"
+import "brook/modules/server"
 
 func main() {
-	example.RunHttpServer()
+	server.RunHttpServer()
 }
