@@ -3,3 +3,6 @@ vendor:
 
 up:
 	docker compose up -d
+
+re:
+	scripts/rename-module.sh example
