@@ -1,13 +1,13 @@
 package middleware
 
 import (
-	"brook/zlogger"
+	"go.uber.org/zap"
 )
 
 type Dependencies struct {
-	logger *zlogger.Logger
+	logger *zap.Logger
 }
 
-func NewDependencies(logger *zlogger.Logger) *Dependencies {
+func NewDependencies(logger *zap.Logger) *Dependencies {
 	return &Dependencies{logger: logger}
 }

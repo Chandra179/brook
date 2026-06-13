@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,12 +8,21 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"brook/config"
 	"brook/middleware"
 	"brook/modules/example"
-	"brook/zlogger"
 )
+
+func newLogger(level string) *zap.Logger {
+	if level == "dev" {
+		l, _ := zap.NewDevelopment()
+		return l
+	}
+	l, _ := zap.NewProduction()
+	return l
+}
 
 func RunHttpServer() {
 	cfg, err := config.Load("config/config.yaml")
@@ -22,7 +30,7 @@ func RunHttpServer() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	logger := zlogger.New(cfg.Middleware.Logger.Level)
+	logger := newLogger(cfg.Middleware.Logger.Level)
 	mdlw := middleware.NewDependencies(logger)
 
 	r := gin.New()
@@ -30,9 +38,9 @@ func RunHttpServer() {
 
 	r.Use(
 		gin.CustomRecovery(func(c *gin.Context, err any) {
-			logger.Error(c.Request.Context(), "panic recovered",
-				zlogger.Field{Key: "panic", Value: fmt.Sprintf("%v", err)},
-				zlogger.Field{Key: "stack", Value: string(debug.Stack())},
+			logger.Error("panic recovered",
+				zap.String("panic", fmt.Sprintf("%v", err)),
+				zap.String("stack", string(debug.Stack())),
 			)
 			c.AbortWithStatus(http.StatusInternalServerError)
 		}),
@@ -52,8 +60,8 @@ func RunHttpServer() {
 		IdleTimeout:  time.Duration(cfg.Example.HTTP.IdleTimeoutInSec) * time.Second,
 	}
 
-	logger.Info(context.Background(), "starting HTTP server", zlogger.Field{Key: "addr", Value: addr})
+	logger.Info("starting HTTP server", zap.String("addr", addr))
 	if err := srv.ListenAndServe(); err != nil {
-		logger.Error(context.Background(), "server error", zlogger.Field{Key: "error", Value: err.Error()})
+		logger.Error("server error", zap.Error(err))
 	}
 }

@@ -1,14 +1,12 @@
 package middleware
 
 import (
-	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"brook/config"
-	"brook/zlogger"
 )
 
 // Request bodies are intentionally NOT logged. After JSON decoding the body
@@ -33,21 +31,21 @@ func (d *Dependencies) RequestLog(cfg config.RequestLogConfig) gin.HandlerFunc {
 		c.Next()
 
 		duration := time.Since(start)
-		fields := []zlogger.Field{
-			{Key: "method", Value: c.Request.Method},
-			{Key: "path", Value: c.Request.URL.Path},
-			{Key: "status", Value: strconv.Itoa(c.Writer.Status())},
-			{Key: "duration_ms", Value: fmt.Sprintf("%.2f", float64(duration.Milliseconds()))},
+		fields := []zap.Field{
+			zap.String("method", c.Request.Method),
+			zap.String("path", c.Request.URL.Path),
+			zap.Int("status", c.Writer.Status()),
+			zap.Int64("duration_ms", duration.Milliseconds()),
 		}
 
 		if reqID := GetRequestID(c.Request.Context()); reqID != "" {
-			fields = append(fields, zlogger.Field{Key: "request_id", Value: reqID})
+			fields = append(fields, zap.String("request_id", reqID))
 		}
 
 		if cfg.LogQuery && c.Request.URL.RawQuery != "" {
-			fields = append(fields, zlogger.Field{Key: "query", Value: c.Request.URL.RawQuery})
+			fields = append(fields, zap.String("query", c.Request.URL.RawQuery))
 		}
 
-		d.logger.Info(c.Request.Context(), "request completed", fields...)
+		d.logger.Info("request completed", fields...)
 	}
 }

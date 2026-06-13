@@ -15,7 +15,7 @@ No test/lint/CI infrastructure exists.
 ## Architecture
 
 - **Framework**: Gin (`github.com/gin-gonic/gin`). Handlers are `gin.HandlerFunc`.
-- **Logger**: custom `brook/zlogger` wrapping `go.uber.org/zap` (not raw zap).
+- **Logger**: `go.uber.org/zap` used directly (no wrapper).
 - **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`) but no gRPC server is wired in the current entrypoint.
 - **Vendor excluded from `.gitignore`** — `make vendor` runs `go mod vendor` but result is not committed.
 - No global state. Dependencies injected via struct fields.

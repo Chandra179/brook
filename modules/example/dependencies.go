@@ -1,18 +1,24 @@
 package example
 
 import (
+	"go.uber.org/zap"
+
 	"brook/middleware"
-	"brook/zlogger"
 )
 
 type Dependencies struct {
 	Config     Config
-	Logger     *zlogger.Logger
+	Logger     *zap.Logger
 	Middleware *middleware.Dependencies
 }
 
 func NewDependencies(cfg Config) *Dependencies {
-	log := zlogger.New(cfg.Middleware.Logger.Level)
+	var log *zap.Logger
+	if cfg.Middleware.Logger.Level == "dev" {
+		log, _ = zap.NewDevelopment()
+	} else {
+		log, _ = zap.NewProduction()
+	}
 	return &Dependencies{
 		Config:     cfg,
 		Logger:     log,
