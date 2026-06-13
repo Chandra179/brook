@@ -8,20 +8,16 @@ import (
 )
 
 type Config struct {
-	Example    ExampleConfig    `yaml:"example"`
+	HTTP       HTTPConfig       `yaml:"http"`
 	Logger     LoggerConfig     `yaml:"logger"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 }
 
-type ExampleConfig struct {
-	HTTP HTTPConfig `yaml:"http"`
-}
-
 type HTTPConfig struct {
-	Port               string `yaml:"port"`
-	ReadTimeoutInSec   int    `yaml:"read_timeout_in_second"`
-	WriteTimeoutInSec  int    `yaml:"write_timeout_in_second"`
-	IdleTimeoutInSec   int    `yaml:"idle_timeout_in_second"`
+	Port              string `yaml:"port"`
+	ReadTimeoutInSec  int    `yaml:"read_timeout_in_second"`
+	WriteTimeoutInSec int    `yaml:"write_timeout_in_second"`
+	IdleTimeoutInSec  int    `yaml:"idle_timeout_in_second"`
 }
 
 type MiddlewareConfig struct {

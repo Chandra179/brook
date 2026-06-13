@@ -47,13 +47,13 @@ func RunHttpServer() {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.POST("/example", exampleMod.Handle)
 
-	addr := fmt.Sprintf(":%s", cfg.Example.HTTP.Port)
+	addr := fmt.Sprintf(":%s", cfg.HTTP.Port)
 	srv := &http.Server{
 		Addr:         addr,
 		Handler:      r,
-		ReadTimeout:  time.Duration(cfg.Example.HTTP.ReadTimeoutInSec) * time.Second,
-		WriteTimeout: time.Duration(cfg.Example.HTTP.WriteTimeoutInSec) * time.Second,
-		IdleTimeout:  time.Duration(cfg.Example.HTTP.IdleTimeoutInSec) * time.Second,
+		ReadTimeout:  time.Duration(cfg.HTTP.ReadTimeoutInSec) * time.Second,
+		WriteTimeout: time.Duration(cfg.HTTP.WriteTimeoutInSec) * time.Second,
+		IdleTimeout:  time.Duration(cfg.HTTP.IdleTimeoutInSec) * time.Second,
 	}
 
 	logger.Info("starting HTTP server", zap.String("addr", addr))
