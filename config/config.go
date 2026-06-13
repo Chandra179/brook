@@ -3,11 +3,13 @@ package config
 import (
 	"os"
 
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
 	Example    ExampleConfig    `yaml:"example"`
+	Logger     LoggerConfig     `yaml:"logger"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 }
 
@@ -24,7 +26,6 @@ type HTTPConfig struct {
 
 type MiddlewareConfig struct {
 	TimeoutInSec int              `yaml:"timeout_in_second"`
-	Logger       LoggerConfig     `yaml:"logger"`
 	RequestLog   RequestLogConfig `yaml:"request_log"`
 	RealIP       RealIPConfig     `yaml:"real_ip"`
 }
@@ -40,6 +41,15 @@ type RealIPConfig struct {
 
 type LoggerConfig struct {
 	Level string `yaml:"level"`
+}
+
+func (l LoggerConfig) New() *zap.Logger {
+	if l.Level == "dev" {
+		logger, _ := zap.NewDevelopment()
+		return logger
+	}
+	logger, _ := zap.NewProduction()
+	return logger
 }
 
 func Load(path string) (*Config, error) {

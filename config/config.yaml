@@ -5,10 +5,11 @@ example:
     write_timeout_in_second: 35
     idle_timeout_in_second: 120
 
+logger:
+  level: dev  # dev | prod
+
 middleware:
   timeout_in_second: 30
-  logger:
-    level: dev  # dev | prod
   request_log:
     skip_paths: []
     log_query: true

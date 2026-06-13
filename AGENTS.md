@@ -15,7 +15,7 @@ No test/lint/CI infrastructure exists.
 ## Architecture
 
 - **Framework**: Gin (`github.com/gin-gonic/gin`). Handlers are `gin.HandlerFunc`.
-- **Logger**: `go.uber.org/zap` used directly (no wrapper).
+- **Logger**: `go.uber.org/zap` used directly (no wrapper). See `LoggerConfig.New()` in `config/config.go`.
 - **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`) but no gRPC server is wired in the current entrypoint.
 - **Vendor excluded from `.gitignore`** — `make vendor` runs `go mod vendor` but result is not committed.
 - No global state. Dependencies injected via struct fields.
@@ -40,15 +40,15 @@ All in `middleware/` package. Request ID stored in `context.Context` — shared 
 
 ## Module pattern (`modules/<name>/`)
 
-Flat Go package. Defines own `Config` struct (independent of shared `config/`). Handlers use `gin.HandlerFunc`. Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
+Flat Go package. Defines own `Config` struct (independent of shared `config/`). Handlers are methods on the module's `Dependencies` struct, registered via `mod.Handle` in the server assembly. Dependencies injected via constructor — `NewDependencies(logger, cfg)`. Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
 
-**Gotcha**: the `example` module has its own `modules/example/config.go` with a different struct layout than `config/config.go`. The server wires `example.Handle` directly without using `example.Dependencies`. If adding a new module, copy `modules/example/` but the server assembly pattern in `modules/server/` is the real wiring reference — not the module's own `dependencies.go`.
+**Important**: the module's `Config` contains only domain-specific config. Logger is **not** part of module config — it's injected directly via constructor. See `modules/example/` as the reference.
 
 ## Config
 
 Shared `config/config.yaml` loaded by `config.Load("config/config.yaml")`. Each module's config section nested under module key in the YAML. Module also defines its own `Config` struct — zero coupling between module configs.
 
-See `example` section in `config/config.yaml` + `modules/example/config.go` for the pattern.
+See `example` section in `config/config.yaml` + `modules/example/config.go` for the pattern. Module configs are independent — zero coupling between them.
 
 ## Creating a new module
 

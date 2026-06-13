@@ -15,23 +15,15 @@ import (
 	"brook/modules/example"
 )
 
-func newLogger(level string) *zap.Logger {
-	if level == "dev" {
-		l, _ := zap.NewDevelopment()
-		return l
-	}
-	l, _ := zap.NewProduction()
-	return l
-}
-
 func RunHttpServer() {
 	cfg, err := config.Load("config/config.yaml")
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
 
-	logger := newLogger(cfg.Middleware.Logger.Level)
+	logger := cfg.Logger.New()
 	mdlw := middleware.NewDependencies(logger)
+	exampleMod := example.NewDependencies(logger)
 
 	r := gin.New()
 	r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
@@ -49,7 +41,7 @@ func RunHttpServer() {
 		middleware.Timeout(time.Duration(cfg.Middleware.TimeoutInSec)*time.Second),
 	)
 
-	r.POST("/example", example.Handle)
+	r.POST("/example", exampleMod.Handle)
 
 	addr := fmt.Sprintf(":%s", cfg.Example.HTTP.Port)
 	srv := &http.Server{
