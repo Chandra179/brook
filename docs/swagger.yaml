@@ -1,0 +1,24 @@
+info:
+  contact: {}
+  description: Modular monolith API server
+  title: Brook API
+  version: 1.0.0
+paths:
+  /example:
+    post:
+      consumes:
+      - application/json
+      description: Returns a simple status response
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Example endpoint
+      tags:
+      - example
+swagger: "2.0"

@@ -8,9 +8,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
 
 	"brook/config"
+	_ "brook/docs"
 	"brook/middleware"
 	"brook/modules/example"
 )
@@ -41,6 +44,7 @@ func RunHttpServer() {
 		middleware.Timeout(time.Duration(cfg.Middleware.TimeoutInSec)*time.Second),
 	)
 
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.POST("/example", exampleMod.Handle)
 
 	addr := fmt.Sprintf(":%s", cfg.Example.HTTP.Port)

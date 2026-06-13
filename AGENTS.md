@@ -8,6 +8,7 @@ Go modular monolith skeleton. Module `brook`, Go 1.26.3.
 go run cmd/example/main.go   # start HTTP server
 go build ./...                # build check
 make vendor                   # go mod tidy && go mod vendor
+make swag                     # regenerate swagger docs (requires swag CLI)
 ```
 
 No test/lint/CI infrastructure exists.
