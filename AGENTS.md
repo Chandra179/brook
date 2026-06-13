@@ -1,55 +1,62 @@
 # Brook — Agent Guide
 
-Go skeleton for evolutionary architecture. Module `brook`, Go 1.26.1.
+Go modular monolith skeleton. Module `brook`, Go 1.26.3.
 
-## Layout (current — docs are stale)
-
-| What | Old path (in docs) | Actual path |
-|------|-------------------|-------------|
-| entrypoint | `cmd/http/main.go`, `cmd/grpc/main.go` | `cmd/order/main.go` |
-| business logic | `internal/modules/<name>/` | `modules/<name>/` |
-| middleware | `internal/middleware/` | `middleware/` |
-
-README documents old structure. Trust filesystem.
-
-## Commands
+## Quick commands
 
 ```bash
-make vendor          # go mod tidy && go mod vendor
-go run cmd/order/main.go
-go build ./...
+go run cmd/example/main.go   # start HTTP server
+go build ./...                # build check
+make vendor                   # go mod tidy && go mod vendor
 ```
 
-No test/lint/CI infrastructure. No `golangci-lint`, no pre-commit hooks.
+No test/lint/CI infrastructure exists.
+
+## Architecture
+
+- **Framework**: Gin (`github.com/gin-gonic/gin`). Handlers are `gin.HandlerFunc`.
+- **Logger**: custom `brook/zlogger` wrapping `go.uber.org/zap` (not raw zap).
+- **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`) but no gRPC server is wired in the current entrypoint.
+- **Vendor excluded from `.gitignore`** — `make vendor` runs `go mod vendor` but result is not committed.
+- No global state. Dependencies injected via struct fields.
+
+## Layout
+
+| Path | Role |
+|------|------|
+| `cmd/example/main.go` | Entrypoint, calls `server.RunHttpServer()` |
+| `modules/server/http_server.go` | Assembles Gin router, registers middleware and routes, starts `http.Server` |
+| `modules/<name>/` | Flat domain module. `config.go` + `dependencies.go` + handler files |
+| `middleware/` | Gin middleware + gRPC interceptor. See `middleware/README.md` |
+| `config/` | Shared config loader (`config.Load("config/config.yaml")`) |
+
+## Middleware order (in `http_server.go`)
+
+```
+gin.CustomRecovery → RequestID → RequestLog → Timeout → handler
+```
+
+All in `middleware/` package. Request ID stored in `context.Context` — shared between HTTP and gRPC. Retrieve via `middleware.GetRequestID(ctx)`.
 
 ## Module pattern (`modules/<name>/`)
 
-Flat Go package. Required: `dependencies.go` (DI wireup), `types.go` (domain types).
-Optional: `http.go`/`grpc.go`/`cron.go` entrypoint, `<action>.go` per handler.
-See `modules/README.md` for details.
+Flat Go package. Defines own `Config` struct (independent of shared `config/`). Handlers use `gin.HandlerFunc`. Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
 
-## Middleware (`middleware/`)
-
-```go
-type Middleware func(http.Handler) http.Handler
-// Chain(handler, Recovery, RequestID, Timeout) — outermost first
-```
-
-Stateless middleware = plain constructors. Logger-dependent middleware = methods on `*Dependencies`.
-`middleware.Dependencies` wraps shared state (logger from `github.com/Chandra179/gosdk`).
-gRPC interceptor `RequestIDUnaryInterceptor` lives alongside HTTP middleware in same package.
+**Gotcha**: the `example` module has its own `modules/example/config.go` with a different struct layout than `config/config.go`. The server wires `example.Handle` directly without using `example.Dependencies`. If adding a new module, copy `modules/example/` but the server assembly pattern in `modules/server/` is the real wiring reference — not the module's own `dependencies.go`.
 
 ## Config
 
-YAML at `config/config.yaml`, loaded by `config.Load("config/config.yaml")`.
-Fields: `http.addr`, `http.*_timeout`, `grpc.addr`, `middleware.timeout`, `middleware.logger.level`.
+Shared `config/config.yaml` loaded by `config.Load("config/config.yaml")`. Each module's config section nested under module key in the YAML. Module also defines its own `Config` struct — zero coupling between module configs.
 
-## Validation
+See `example` section in `config/config.yaml` + `modules/example/config.go` for the pattern.
 
-`middleware.DecodeAndValidate[T](r)` — decodes JSON + validates `go-playground/validator` struct tags.
-Call inside handlers, not as middleware.
+## Creating a new module
 
-## State
+Copy `modules/example/`, rename package, add route in `modules/server/http_server.go`, add config section in `config/config.yaml`.
 
-Repo is mid-restructure: old `internal/` files deleted on disk, new flat files untracked.
-No tests exist. No vendor in git (`.gitignore` has `vendor`).
+## Renaming project
+
+```bash
+scripts/rename-module.sh <new-module-name>
+```
+Updates `go.mod` and all import paths. Run `go build ./...` to verify.
