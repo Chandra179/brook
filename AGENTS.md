@@ -5,13 +5,13 @@ Go modular monolith skeleton. Module `brook`, Go 1.26.3.
 ## Quick commands
 
 ```bash
-go run cmd/example/main.go   # start HTTP server
-go build ./...                # build check
+make run                      # go run ./cmd/example/
+make ci                       # full CI pipeline (build, vet, vendor, swagger, docker)
 make vendor                   # go mod tidy && go mod vendor
 make swag                     # regenerate swagger docs (requires swag CLI)
 ```
 
-No test/lint/CI infrastructure exists.
+CI via `make ci` (local) or `act push` / `act pull_request` (GitHub Actions locally). See `.github/workflows/ci.yml`.
 
 ## Architecture
 

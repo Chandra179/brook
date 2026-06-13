@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Vendor consistency
+        run: |
+          go mod tidy
+          go mod vendor
+          git diff --exit-code
+
+      - name: Swagger consistency
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@v1.16.4
+          swag init -g cmd/example/main.go -o docs
+          git diff --exit-code docs/
+
+      - name: Docker build
+        run: docker build .
