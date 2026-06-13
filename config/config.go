@@ -23,8 +23,19 @@ type HTTPConfig struct {
 }
 
 type MiddlewareConfig struct {
-	TimeoutInSec int          `yaml:"timeout_in_second"`
-	Logger       LoggerConfig `yaml:"logger"`
+	TimeoutInSec int              `yaml:"timeout_in_second"`
+	Logger       LoggerConfig     `yaml:"logger"`
+	RequestLog   RequestLogConfig `yaml:"request_log"`
+	RealIP       RealIPConfig     `yaml:"real_ip"`
+}
+
+type RequestLogConfig struct {
+	SkipPaths []string `yaml:"skip_paths"`
+	LogQuery  bool     `yaml:"log_query"`
+}
+
+type RealIPConfig struct {
+	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
 type LoggerConfig struct {

@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"brook/config"
 	"brook/middleware"
@@ -22,22 +25,28 @@ func RunHttpServer() {
 	logger := zlogger.New(cfg.Middleware.Logger.Level)
 	mdlw := middleware.NewDependencies(logger)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /example", example.Handle)
+	r := gin.New()
+	r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
 
-	chain := middleware.Chain(
-		mux,
-		mdlw.Recovery(),
-		middleware.RequestID,
-		middleware.Timeout(middleware.TimeoutConfig{
-			Duration: time.Duration(cfg.Middleware.TimeoutInSec) * time.Second,
+	r.Use(
+		gin.CustomRecovery(func(c *gin.Context, err any) {
+			logger.Error(c.Request.Context(), "panic recovered",
+				zlogger.Field{Key: "panic", Value: fmt.Sprintf("%v", err)},
+				zlogger.Field{Key: "stack", Value: string(debug.Stack())},
+			)
+			c.AbortWithStatus(http.StatusInternalServerError)
 		}),
+		middleware.RequestID,
+		mdlw.RequestLog(cfg.Middleware.RequestLog),
+		middleware.Timeout(time.Duration(cfg.Middleware.TimeoutInSec)*time.Second),
 	)
+
+	r.POST("/example", example.Handle)
 
 	addr := fmt.Sprintf(":%s", cfg.Example.HTTP.Port)
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      chain,
+		Handler:      r,
 		ReadTimeout:  time.Duration(cfg.Example.HTTP.ReadTimeoutInSec) * time.Second,
 		WriteTimeout: time.Duration(cfg.Example.HTTP.WriteTimeoutInSec) * time.Second,
 		IdleTimeout:  time.Duration(cfg.Example.HTTP.IdleTimeoutInSec) * time.Second,

@@ -1,9 +1,11 @@
 package example
 
-import "net/http"
+import (
+	"net/http"
 
-func Handle(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	"github.com/gin-gonic/gin"
+)
+
+func Handle(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }

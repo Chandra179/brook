@@ -9,3 +9,8 @@ middleware:
   timeout_in_second: 30
   logger:
     level: dev  # dev | prod
+  request_log:
+    skip_paths: []
+    log_query: true
+  real_ip:
+    trusted_proxies: []

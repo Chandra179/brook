@@ -1,30 +1,32 @@
 # Middleware
 
-1. When implementing middleware within a service (in-process), you typically focus on logic that requires application context or needs to be highly performant without extra network hops.
+Gin middleware used by the HTTP server. Registered in order via `r.Use(...)`:
 
-2. Checks if the user has specific permissions for a specific resource (e.g., "Can User X edit Document Y?").
-
-3. Capturing the specific internal state of a request, including the function names or database execution times, to help with debugging.
-
-4. Ensuring the JSON payload matches your specific Go structs before it hits the handler. Use Declarative Validation, Instead of writing logic, you use Struct Tags to define rules. Example using gin:
-
-```go
-func Validate[T any](c *gin.Context) (T, bool) {
-    var req T
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-        return req, false
-    }
-    return req, true
-}
-
-// Usage in your service:
-func CreateOrderHandler(c *gin.Context) {
-    req, ok := Validate[OrderRequest](c)
-    if !ok { return }
-    
-    // Proceed with business logic
-}
+```
+g.CustomRecovery → RequestID → RequestLog → Timeout → handler
 ```
 
-5. catches internal code crashes (panics) and returns a clean 500 Internal Server Error instead of crashing the entire process.
+## Files
+
+| File | Kind | Description |
+|------|------|-------------|
+| `dependencies.go` | infra | Holds `*zlogger.Logger` for stateful middleware |
+| `request_id.go` | middleware | Reads/reuses `X-Request-ID` header, stores in context, echoes in response. Also exports `RequestIDUnaryInterceptor` for gRPC and `GetRequestID(ctx)` for handlers. |
+| `request_log.go` | middleware | Logs method, path, status, duration, request ID, and query params. Skips configured paths. Request bodies are intentionally NOT logged (see comment in file). |
+| `timeout.go` | middleware | Sets a `context.WithTimeout` deadline on the request. |
+
+## Why no body logging?
+
+After JSON decoding, the body seen in middleware is not what the client sent (whitespace stripped, keys reordered, unknown fields dropped). Logging it provides no debugging value and risks PII leakage. Use structured error responses returned to the client instead.
+
+## Why no RealIP middleware?
+
+Gin's `engine.SetTrustedProxies()` + `c.ClientIP()` handle `X-Forwarded-For` / `X-Real-IP` with CIDR-based trust filtering. No custom middleware needed.
+
+## Why no Recovery middleware?
+
+`gin.CustomRecovery` handles panics and writes a 500 response. The recovery callback uses `zlogger` so stack traces go to structured logs, not stdout.
+
+## Why no validation middleware?
+
+`c.ShouldBindJSON(&req)` + `binding` struct tags replace the old `DecodeAndValidate[T]` helper. Keep validation logic in handlers, not middleware.
