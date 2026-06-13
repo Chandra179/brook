@@ -5,7 +5,9 @@ swag:
 	swag init -g cmd/example/main.go -o docs
 
 ci:
-	act workflow_dispatch --container-daemon-socket /var/run/docker.sock
+	act workflow_dispatch \
+		--container-daemon-socket /var/run/docker.sock \
+		--reuse
 
 run:
 	go run ./cmd/example/
