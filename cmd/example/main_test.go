@@ -16,9 +16,12 @@ import (
 func TestServerSetup(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	cfg, err := config.Load("../../config/config.yaml")
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
+	cfg := config.Config{
+		Logger: config.LoggerConfig{Level: "prod"},
+		Middleware: config.MiddlewareConfig{
+			RequestLog:   config.RequestLogConfig{LogQuery: true},
+			TimeoutInSec: 30,
+		},
 	}
 
 	logger := cfg.Logger.New()
