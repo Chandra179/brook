@@ -4,6 +4,9 @@ vendor:
 swag:
 	swag init -g cmd/example/main.go -o docs
 
+lint:
+	golangci-lint run
+
 ci:
 	act workflow_dispatch \
 		--container-daemon-socket /var/run/docker.sock \

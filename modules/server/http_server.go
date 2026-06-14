@@ -29,7 +29,7 @@ func RunHttpServer() {
 	exampleMod := example.NewDependencies(logger)
 
 	r := gin.New()
-	r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
+	_ = r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
 
 	r.Use(
 		gin.CustomRecovery(func(c *gin.Context, err any) {

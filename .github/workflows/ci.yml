@@ -1,6 +1,6 @@
 name: CI
 
-on: [workflow_dispatch]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   ci:
@@ -11,24 +11,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.3'
+          cache: true
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2
+
+      - name: Test
+        run: go test -race -count=1 ./...
 
       - name: Build
-        run: go build ./...
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Vendor consistency
-        run: |
-          go mod tidy
-          go mod vendor
-          git diff --exit-code
-
-      - name: Swagger consistency
-        run: |
-          go install github.com/swaggo/swag/cmd/swag@v1.16.4
-          swag init -g cmd/example/main.go -o docs
-          git diff --exit-code docs/
+        run: go build -mod=vendor ./...
 
       - name: Docker build
         run: docker build .

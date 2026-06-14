@@ -8,9 +8,9 @@ import (
 )
 
 type Config struct {
-	HTTP       HTTPConfig       `yaml:"http"`
 	Logger     LoggerConfig     `yaml:"logger"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
+	HTTP       HTTPConfig       `yaml:"http"`
 }
 
 type HTTPConfig struct {
@@ -21,9 +21,9 @@ type HTTPConfig struct {
 }
 
 type MiddlewareConfig struct {
-	TimeoutInSec int              `yaml:"timeout_in_second"`
-	RequestLog   RequestLogConfig `yaml:"request_log"`
 	RealIP       RealIPConfig     `yaml:"real_ip"`
+	RequestLog   RequestLogConfig `yaml:"request_log"`
+	TimeoutInSec int              `yaml:"timeout_in_second"`
 }
 
 type RequestLogConfig struct {
@@ -53,7 +53,7 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var cfg Config
 	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {

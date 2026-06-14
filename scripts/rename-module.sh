@@ -38,4 +38,8 @@ if find . -name '*.proto' -print0 | xargs -0 grep -l "$old/" 2>/dev/null; then
 	echo "  updated .proto files"
 fi
 
+# 4. Update local-prefixes in .golangci.yml
+sed -i "s|local-prefixes: $old|local-prefixes: $new|" .golangci.yml
+echo "  updated .golangci.yml"
+
 echo "Done. Run 'go build ./...' to verify."
