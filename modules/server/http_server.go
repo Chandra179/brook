@@ -41,7 +41,6 @@ func RunHttpServer() {
 		}),
 		middleware.RequestID,
 		mdlw.RequestLog(cfg.Middleware.RequestLog),
-		middleware.Timeout(time.Duration(cfg.Middleware.TimeoutInSec)*time.Second),
 	)
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

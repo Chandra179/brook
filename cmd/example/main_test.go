@@ -4,23 +4,30 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/goleak"
 
 	"brook/config"
 	"brook/middleware"
 	"brook/modules/example"
 )
 
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
+
 func TestServerSetup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration-dependent test in short mode")
+	}
+
 	gin.SetMode(gin.TestMode)
 
 	cfg := config.Config{
 		Logger: config.LoggerConfig{Level: "prod"},
 		Middleware: config.MiddlewareConfig{
-			RequestLog:   config.RequestLogConfig{LogQuery: true},
-			TimeoutInSec: 30,
+			RequestLog: config.RequestLogConfig{LogQuery: true},
 		},
 	}
 
@@ -32,7 +39,6 @@ func TestServerSetup(t *testing.T) {
 	r.Use(
 		middleware.RequestID,
 		mdlw.RequestLog(cfg.Middleware.RequestLog),
-		middleware.Timeout(time.Duration(cfg.Middleware.TimeoutInSec)*time.Second),
 	)
 	r.POST("/example", exampleMod.Handle)
 

@@ -21,9 +21,8 @@ type HTTPConfig struct {
 }
 
 type MiddlewareConfig struct {
-	RealIP       RealIPConfig     `yaml:"real_ip"`
-	RequestLog   RequestLogConfig `yaml:"request_log"`
-	TimeoutInSec int              `yaml:"timeout_in_second"`
+	RealIP     RealIPConfig     `yaml:"real_ip"`
+	RequestLog RequestLogConfig `yaml:"request_log"`
 }
 
 type RequestLogConfig struct {

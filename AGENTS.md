@@ -6,6 +6,8 @@ Go modular monolith skeleton. Module `brook`, Go 1.26.3.
 
 ```bash
 make run                      # go run ./cmd/example/
+make test                     # go test -short -race -count=1 ./... (unit tests only)
+make test-integration         # go test -race -count=1 -v ./... (includes integration tests)
 make ci                       # full CI pipeline (build, vet, vendor, swagger, docker)
 make vendor                   # go mod tidy && go mod vendor
 make swag                     # regenerate swagger docs (requires swag CLI)
@@ -34,7 +36,7 @@ CI via `make ci` (local) or `act push` / `act pull_request` (GitHub Actions loca
 ## Middleware order (in `http_server.go`)
 
 ```
-gin.CustomRecovery → RequestID → RequestLog → Timeout → handler
+gin.CustomRecovery → RequestID → RequestLog → handler
 ```
 
 All in `middleware/` package. Request ID stored in `context.Context` — shared between HTTP and gRPC. Retrieve via `middleware.GetRequestID(ctx)`.
@@ -54,6 +56,13 @@ See `example` section in `config/config.yaml` + `modules/example/config.go` for 
 ## Creating a new module
 
 Copy `modules/example/`, rename package, add route in `modules/server/http_server.go`, add config section in `config/config.yaml`.
+
+## Principles
+
+Brook conventions are documented in `modules/README.md`, `middleware/README.md`,
+and the sections above. When a design question falls outside those conventions
+(e.g. "how would Google handle this?"), load the **big-tech-patterns** skill
+(`.opencode/skills/big-tech-patterns/SKILL.md`) for industry reference.
 
 ## Renaming project
 

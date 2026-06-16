@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/items",
+    "headers": {
+      "Content-Type": [
+        "application/json"
+      ]
+    },
+    "body": "{\"name\":\"idempotent-item\"}"
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": [
+        "application/json; charset=utf-8"
+      ]
+    },
+    "body": "{\"id\":1,\"name\":\"idempotent-item\"}"
+  },
+  "db_snapshot": {
+    "before": {
+      "items": []
+    },
+    "after": {
+      "items": [
+        {
+          "created_at": "2026-06-16T13:27:48.167966+07:00",
+          "id": 1,
+          "name": "idempotent-item"
+        },
+        {
+          "created_at": "2026-06-16T13:27:48.168736+07:00",
+          "id": 2,
+          "name": "idempotent-item"
+        }
+      ]
+    }
+  }
+}
