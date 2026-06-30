@@ -38,6 +38,37 @@ No inter-module coupling — modules call shared infra (`middleware/`), not each
 
 Each module owns its config shape. Means 3 lines of YAML load boilerplate per module. Tradeoff: migration = copy module dir, zero dependency on shared config types.
 
+## Interface contracts & providers
+
+A module can define an **interface** — a contract — that other modules must follow to plug into its system. The module that owns the contract defines it in its own package. External provider modules implement it.
+
+Example: `modules/example/provider.go` defines `Provider`:
+
+```go
+type Provider interface {
+    HandleProvider(r string)
+}
+```
+
+Any module wanting to act as a provider creates a file (convention: `provider.go`) that implements the interface and adds a **compile-time assertion**:
+
+```go
+package myprovider
+
+import "brook/modules/example"
+
+// compile-time check: *Dependencies implements example.Provider
+var _ example.Provider = (*Dependencies)(nil)
+
+func (d *Dependencies) HandleProvider(r string) {
+    // implementation
+}
+```
+
+If `*Dependencies` is missing any method from `example.Provider`, the build fails immediately — no runtime surprises.
+
+**Why separate provider modules?** The contract owner (e.g. `example`) shouldn't know about every implementation. External providers can live in their own packages, be swapped at the assembly point (`http_server.go`), and even live outside the monolith later.
+
 ## Adding a new module
 
 1. **Copy the example skeleton**:

@@ -15,6 +15,7 @@ import (
 	"brook/config"
 	_ "brook/docs"
 	"brook/middleware"
+	"brook/modules/echo"
 	"brook/modules/example"
 )
 
@@ -26,7 +27,9 @@ func RunHttpServer() {
 
 	logger := cfg.Logger.New()
 	mdlw := middleware.NewDependencies(logger)
-	exampleMod := example.NewDependencies(logger)
+
+	var p example.Provider = echo.NewDependencies(logger)
+	p.HandleProvider("server starting")
 
 	r := gin.New()
 	_ = r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
@@ -44,7 +47,6 @@ func RunHttpServer() {
 	)
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	r.POST("/example", exampleMod.Handle)
 
 	addr := fmt.Sprintf(":%s", cfg.HTTP.Port)
 	srv := &http.Server{
