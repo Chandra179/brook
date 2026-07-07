@@ -1,4 +1,4 @@
-.PHONY: vendor swag test test-integration lint ci run up down re
+.PHONY: vendor swag test test-integration lint ci run up down re fieldalignment modernize
 
 vendor:
 	go mod tidy && go mod vendor
@@ -31,3 +31,10 @@ down:
 
 re:
 	scripts/rename-module.sh example
+
+modernize:
+	go fix ./...
+
+align:
+	@which fieldalignment >/dev/null 2>&1 || go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest
+	fieldalignment -fix ./...

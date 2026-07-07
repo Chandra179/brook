@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,11 +21,9 @@ import (
 // context. Requests matching SkipPaths are passed through without logging.
 func (d *Dependencies) RequestLog(cfg config.RequestLogConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		for _, p := range cfg.SkipPaths {
-			if c.Request.URL.Path == p {
-				c.Next()
-				return
-			}
+		if slices.Contains(cfg.SkipPaths, c.Request.URL.Path) {
+			c.Next()
+			return
 		}
 
 		start := time.Now()
