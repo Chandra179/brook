@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,15 +35,6 @@ type RealIPConfig struct {
 
 type LoggerConfig struct {
 	Level string `yaml:"level"`
-}
-
-func (l LoggerConfig) New() *zap.Logger {
-	if l.Level == "dev" {
-		logger, _ := zap.NewDevelopment()
-		return logger
-	}
-	logger, _ := zap.NewProduction()
-	return logger
 }
 
 func Load(path string) (*Config, error) {

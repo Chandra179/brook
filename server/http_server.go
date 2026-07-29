@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"runtime/debug"
 	"time"
 
@@ -14,22 +15,31 @@ import (
 
 	"brook/config"
 	_ "brook/docs"
+	"brook/logger"
 	"brook/middleware"
-	"brook/modules/echo"
 	"brook/modules/example"
 )
 
 func RunHttpServer() {
-	cfg, err := config.Load("config/config.yaml")
+	appEnvironment := os.Getenv("APP_ENVIRONMENT")
+
+	configPath := "config/config_prd.yaml"
+	if appEnvironment == "dev" {
+		configPath = "config/config_dev.yaml"
+	}
+
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
 
-	logger := cfg.Logger.New()
-	mdlw := middleware.NewDependencies(logger)
+	logger, err := logger.NewLogger(appEnvironment)
+	if err != nil {
+		log.Fatalf("new logger: %v", err)
+	}
 
-	var p example.Provider = echo.NewDependencies(logger)
-	p.HandleProvider("server starting")
+	mdlw := middleware.NewDependencies(logger)
+	exampleDeps := example.NewDependencies(logger)
 
 	r := gin.New()
 	_ = r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
@@ -47,6 +57,7 @@ func RunHttpServer() {
 	)
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.POST("/example", exampleDeps.HandleExample)
 
 	addr := fmt.Sprintf(":%s", cfg.HTTP.Port)
 	srv := &http.Server{

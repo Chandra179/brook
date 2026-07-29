@@ -1,6 +1,6 @@
 package main
 
-import "brook/modules/server"
+import "brook/server"
 
 // @title           Brook API
 // @version         1.0.0

@@ -6,7 +6,7 @@ example:
     idle_timeout_in_second: 120
 
 logger:
-  level: dev  # dev | prod
+  level: prd
 
 middleware:
   request_log:
