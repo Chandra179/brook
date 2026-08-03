@@ -39,7 +39,7 @@ func RunHttpServer() {
 	}
 
 	mdlw := middleware.NewDependencies(logger)
-	exampleDeps := example.NewDependencies(logger)
+	exampleDeps := example.NewDependencies(&example.DependenciesConfig{Logger: logger})
 
 	r := gin.New()
 	_ = r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)

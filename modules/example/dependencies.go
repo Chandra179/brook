@@ -4,10 +4,14 @@ import (
 	"go.uber.org/zap"
 )
 
-type Dependencies struct {
+type dependencies struct {
+	logger *zap.Logger
+}
+
+type DependenciesConfig struct {
 	Logger *zap.Logger
 }
 
-func NewDependencies(logger *zap.Logger) *Dependencies {
-	return &Dependencies{Logger: logger}
+func NewDependencies(deps *DependenciesConfig) *dependencies {
+	return &dependencies{logger: deps.Logger}
 }
