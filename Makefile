@@ -1,10 +1,13 @@
-.PHONY: vendor swag test test-integration lint ci run up down re fieldalignment modernize
+.PHONY: vendor swag mocks test test-integration lint ci run up down re fieldalignment modernize
 
 vendor:
 	go mod tidy && go mod vendor
 
 swag:
 	swag init -g cmd/example/main.go -o docs
+
+mocks:
+	go tool mockery
 
 test:
 	go test -short -race -count=1 ./...

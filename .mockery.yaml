@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://vektra.github.io/mockery/latest/schema.json
+template: testify
+recursive: true
+all: true
+dir: "mocks/{{.InterfaceDirRelative}}"
+filename: "{{.InterfaceName | snakecase}}_mock.go"
+pkgname: mocks
+packages:
+  brook:
+    config:
