@@ -1,16 +1,16 @@
-example:
-  http:
-    port: "8080"
-    read_timeout_in_second: 5
-    write_timeout_in_second: 120
-    idle_timeout_in_second: 120
+http:
+  port: "8080"
+  read_timeout_in_second: 5
+  write_timeout_in_second: 120
+  idle_timeout_in_second: 120
+  shutdown_timeout_in_second: 5
 
 logger:
   level: dev
 
 middleware:
   request_log:
-    skip_paths: []
+    skip_paths: ["/health"]
     log_query: true
   real_ip:
     trusted_proxies: []

@@ -13,10 +13,11 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-	Port              string `yaml:"port"`
-	ReadTimeoutInSec  int    `yaml:"read_timeout_in_second"`
-	WriteTimeoutInSec int    `yaml:"write_timeout_in_second"`
-	IdleTimeoutInSec  int    `yaml:"idle_timeout_in_second"`
+	Port                 string `yaml:"port"`
+	ReadTimeoutInSec     int    `yaml:"read_timeout_in_second"`
+	WriteTimeoutInSec    int    `yaml:"write_timeout_in_second"`
+	IdleTimeoutInSec     int    `yaml:"idle_timeout_in_second"`
+	ShutdownTimeoutInSec int    `yaml:"shutdown_timeout_in_second"`
 }
 
 type MiddlewareConfig struct {

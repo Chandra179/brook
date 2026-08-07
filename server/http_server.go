@@ -1,11 +1,15 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +45,12 @@ func RunHttpServer() {
 	mdlw := middleware.NewDependencies(logger)
 	exampleDeps := example.NewDependencies(&example.DependenciesConfig{Logger: logger})
 
+	if appEnvironment == "dev" {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	r := gin.New()
 	_ = r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
 
@@ -56,6 +66,9 @@ func RunHttpServer() {
 		mdlw.RequestLog(cfg.Middleware.RequestLog),
 	)
 
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.POST("/example", exampleDeps.HandleExample)
 
@@ -68,8 +81,38 @@ func RunHttpServer() {
 		IdleTimeout:  time.Duration(cfg.HTTP.IdleTimeoutInSec) * time.Second,
 	}
 
-	logger.Info("starting HTTP server", zap.String("addr", addr))
-	if err := srv.ListenAndServe(); err != nil {
-		logger.Error("server error", zap.Error(err))
+	serverErr := make(chan error, 1)
+	go func() {
+		logger.Info("starting HTTP server", zap.String("addr", addr))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+			return
+		}
+		serverErr <- nil
+	}()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			logger.Fatal("server error", zap.Error(err))
+		}
+	case <-ctx.Done():
+		stop()
+		logger.Info("shutdown signal received, draining in-flight requests")
+
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			time.Duration(cfg.HTTP.ShutdownTimeoutInSec)*time.Second,
+		)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error("graceful shutdown failed", zap.Error(err))
+			return
+		}
+		logger.Info("HTTP server stopped")
 	}
 }
