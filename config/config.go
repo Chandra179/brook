@@ -7,6 +7,7 @@ import (
 )
 
 type Config struct {
+	Profiling  ProfilingConfig  `yaml:"profiling"`
 	Logger     LoggerConfig     `yaml:"logger"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 	HTTP       HTTPConfig       `yaml:"http"`
@@ -36,6 +37,12 @@ type RealIPConfig struct {
 
 type LoggerConfig struct {
 	Level string `yaml:"level"`
+}
+
+type ProfilingConfig struct {
+	ServerAddress   string `yaml:"server_address"`
+	ApplicationName string `yaml:"application_name"`
+	Enabled         bool   `yaml:"enabled"`
 }
 
 func Load(path string) (*Config, error) {

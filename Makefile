@@ -1,4 +1,4 @@
-.PHONY: vendor swag mocks test test-integration lint ci run up down re fieldalignment modernize
+.PHONY: vendor swag mocks test test-integration lint ci run up down re fieldalignment modernize profiler
 
 vendor:
 	go mod tidy && go mod vendor
@@ -41,3 +41,6 @@ modernize:
 align:
 	@which fieldalignment >/dev/null 2>&1 || go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest
 	fieldalignment -fix ./...
+
+profiler:
+	docker run --rm -p 4040:4040 grafana/pyroscope

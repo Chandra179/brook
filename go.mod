@@ -4,10 +4,10 @@ go 1.26.5
 
 require (
 	github.com/gin-gonic/gin v1.12.0
+	github.com/grafana/pyroscope-go v1.4.1
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.4
-	go.uber.org/goleak v1.3.0
 	go.uber.org/zap v1.28.0
 	google.golang.org/grpc v1.80.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -37,11 +37,13 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
+	github.com/grafana/pyroscope-go/godeltaprof v0.1.11 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.7.8 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
 	github.com/knadh/koanf/parsers/yaml v1.1.0 // indirect
@@ -62,7 +64,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect

@@ -1,72 +1,75 @@
 # Brook — Agent Guide
 
-Go modular monolith skeleton. Module `brook`, Go 1.26.3.
+Go modular monolith skeleton. Module `brook`, Go `1.26.5`. One binary, domain modules as Go packages.
 
-## Quick commands
+## Commands
 
 ```bash
-make run                      # go run ./cmd/example/
-make test                     # go test -short -race -count=1 ./... (unit tests only)
-make test-integration         # go test -race -count=1 -v ./... (includes integration tests)
-make ci                       # full CI pipeline (build, vet, vendor, swagger, docker)
-make vendor                   # go mod tidy && go mod vendor
-make swag                     # regenerate swagger docs (requires swag CLI)
+make run              # go run ./cmd/example/
+make test             # go test -short -race -count=1 ./...  (unit only, skips integration)
+make test-integration # go test -tags=integration -race -count=1 -v ./...
+make lint             # golangci-lint run  (v2 config in .golangci.yml)
+make vendor           # go mod tidy && go mod vendor
+make swag             # swag init -g cmd/example/main.go -o docs
+make mocks            # go tool mockery
+make up / down        # docker compose up/down
+make modernize        # go fix ./...
+make align            # fieldalignment -fix ./...
+make re               # scripts/rename-module.sh example
+make profiler         # docker run -p 4040:4040 grafana/pyroscope (continuous profiling server)
+make ci               # act workflow_dispatch  (runs GitHub Actions locally via act)
 ```
 
-CI via `make ci` (local) or `act push` / `act pull_request` (GitHub Actions locally). See `.github/workflows/ci.yml`.
+Integration tests are gated by `-tags=integration`; plain `make test` skips them. Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test → test-integration → build → docker build).
 
 ## Architecture
 
-- **Framework**: Gin (`github.com/gin-gonic/gin`). Handlers are `gin.HandlerFunc`.
-- **Logger**: `go.uber.org/zap` used directly (no wrapper). See `LoggerConfig.New()` in `config/config.go`.
-- **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`) but no gRPC server is wired in the current entrypoint.
-- **Vendor excluded from `.gitignore`** — `make vendor` runs `go mod vendor` but result is not committed.
-- No global state. Dependencies injected via struct fields.
+- **Framework**: Gin. Handlers are `gin.HandlerFunc` methods on a module's unexported `*dependencies` struct.
+- **Logger**: `go.uber.org/zap` used directly (no wrapper). Built via `logger.NewLogger(appEnvironment)` in `logger/logger.go` — Development for `dev`, else Production. **Not** handled in `config/`.
+- **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`), but no gRPC server is wired in the entrypoint.
+- **No global state**; deps injected via constructor.
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| `cmd/example/main.go` | Entrypoint, calls `server.RunHttpServer()` |
-| `modules/server/http_server.go` | Assembles Gin router, registers middleware and routes, starts `http.Server` |
-| `modules/<name>/` | Flat domain module. `config.go` + `dependencies.go` + handler files |
+| `cmd/example/main.go` | Entrypoint → `server.RunHttpServer()` |
+| `server/http_server.go` | Assembles Gin router, registers middleware/routes, graceful shutdown |
+| `modules/<name>/` | Flat domain module package |
 | `middleware/` | Gin middleware + gRPC interceptor. See `middleware/README.md` |
-| `config/` | Shared config loader (`config.Load("config/config.yaml")`) |
+| `config/` | Shared YAML loader + `config_prd.yaml` / `config_dev.yaml` |
+| `logger/` | zap logger constructor |
+| `docs/` | Generated swagger output (do not hand-edit) |
+| `test/integration` | Currently empty; future integration tests |
 
-## Middleware order (in `http_server.go`)
+## Config & env
+
+- `APP_ENVIRONMENT` selects the config file: `dev` → `config/config_dev.yaml`, anything else (incl. unset) → `config/config_prd.yaml`. Load with `config.Load(path)` (`config/config.go`).
+- Shared config is **flat** (`http`, `logger`, `middleware`, `profiling`) — not nested per-module. Modules receive only what they need via constructor args.
+- `profiling` (Pyroscope push SDK) is gated by `enabled`; run `make profiler` to start the server it pushes to.
+
+## Module pattern (`modules/<name>/`)
+
+Flat package. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/http_server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
+
+Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `service.go`, `http_handler.go`, `errors.go`, `constant.go`; no separate `config.go`).
+
+## Middleware order (in `server/http_server.go`)
 
 ```
 gin.CustomRecovery → RequestID → RequestLog → handler
 ```
 
-All in `middleware/` package. Request ID stored in `context.Context` — shared between HTTP and gRPC. Retrieve via `middleware.GetRequestID(ctx)`.
-
-## Module pattern (`modules/<name>/`)
-
-Flat Go package. Defines own `Config` struct (independent of shared `config/`). Handlers are methods on the module's `Dependencies` struct, registered via `mod.Handle` in the server assembly. Dependencies injected via constructor — `NewDependencies(logger, cfg)`. Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
-
-**Important**: the module's `Config` contains only domain-specific config. Logger is **not** part of module config — it's injected directly via constructor. See `modules/example/` as the reference.
-
-## Config
-
-Shared `config/config.yaml` loaded by `config.Load("config/config.yaml")`. Each module's config section nested under module key in the YAML. Module also defines its own `Config` struct — zero coupling between module configs.
-
-See `example` section in `config/config.yaml` + `modules/example/config.go` for the pattern. Module configs are independent — zero coupling between them.
+All in `middleware/`. Request ID stored in `context.Context` (shared HTTP/gRPC); retrieve via `middleware.GetRequestID(ctx)`.
 
 ## Creating a new module
 
-Copy `modules/example/`, rename package, add route in `modules/server/http_server.go`, add config section in `config/config.yaml`.
-
-## Principles
-
-Brook conventions are documented in `modules/README.md`, `middleware/README.md`,
-and the sections above. When a design question falls outside those conventions
-(e.g. "how would Google handle this?"), load the **big-tech-patterns** skill
-(`.opencode/skills/big-tech-patterns/SKILL.md`) for industry reference.
+Copy `modules/example/`, rename the package, wire deps in `dependencies.go`, and register its handlers in `server/http_server.go`. No config section needed (shared config is flat).
 
 ## Renaming project
 
 ```bash
 scripts/rename-module.sh <new-module-name>
 ```
-Updates `go.mod` and all import paths. Run `go build ./...` to verify.
+
+Updates `go.mod`, all import paths, and `.golangci.yml` `local-prefixes`. Verify with `go build ./...`.

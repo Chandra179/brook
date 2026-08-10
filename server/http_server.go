@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/debug"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/grafana/pyroscope-go"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
@@ -35,6 +37,33 @@ func RunHttpServer() {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
+	}
+
+	if cfg.Profiling.Enabled {
+		runtime.SetMutexProfileFraction(5)
+		runtime.SetBlockProfileRate(5)
+
+		profiler, pErr := pyroscope.Start(pyroscope.Config{
+			ApplicationName: cfg.Profiling.ApplicationName,
+			ServerAddress:   cfg.Profiling.ServerAddress,
+			Logger:          pyroscope.StandardLogger,
+			ProfileTypes: []pyroscope.ProfileType{
+				pyroscope.ProfileCPU,
+				pyroscope.ProfileAllocObjects,
+				pyroscope.ProfileAllocSpace,
+				pyroscope.ProfileInuseObjects,
+				pyroscope.ProfileInuseSpace,
+				pyroscope.ProfileGoroutines,
+				pyroscope.ProfileMutexCount,
+				pyroscope.ProfileMutexDuration,
+				pyroscope.ProfileBlockCount,
+				pyroscope.ProfileBlockDuration,
+			},
+		})
+		if pErr != nil {
+			log.Fatalf("start pyroscope: %v", pErr)
+		}
+		defer func() { _ = profiler.Stop() }()
 	}
 
 	logger, err := logger.NewLogger(appEnvironment)
