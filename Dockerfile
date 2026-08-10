@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26.5-bookworm
+FROM golang:1.26.5-bookworm AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -13,8 +13,11 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=builder /app/main .
-COPY config/config.yaml config/
+COPY config/config_prd.yaml config/
+COPY config/config_dev.yaml config/
 
 EXPOSE 8080
+
+ENV APP_ENVIRONMENT=prd
 
 ENTRYPOINT ["/app/main"]

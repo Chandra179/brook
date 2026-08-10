@@ -56,5 +56,10 @@ func Load(path string) (*Config, error) {
 	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
 		return nil, err
 	}
+
+	if addr := os.Getenv("PYROSCOPE_SERVER_ADDRESS"); addr != "" {
+		cfg.Profiling.ServerAddress = addr
+	}
+
 	return &cfg, nil
 }

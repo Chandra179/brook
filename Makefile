@@ -1,4 +1,4 @@
-.PHONY: vendor swag mocks test test-integration lint ci run up down re fieldalignment modernize profiler
+.PHONY: vendor swag mocks test test-integration lint ci run up down re fieldalignment modernize profiler dashboards
 
 vendor:
 	go mod tidy && go mod vendor
@@ -43,4 +43,7 @@ align:
 	fieldalignment -fix ./...
 
 profiler:
-	docker run --rm -p 4040:4040 grafana/pyroscope
+	docker compose up -d pyroscope grafana
+
+dashboards:
+	docker compose up -d pyroscope grafana
