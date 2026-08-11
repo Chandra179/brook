@@ -19,3 +19,9 @@ profiling:
   enabled: false
   server_address: "http://pyroscope:4040"
   application_name: "brook"
+
+postgres:
+  # DSN is expected via the POSTGRES_DSN env var at deploy time; this is a placeholder only.
+  dsn: ""
+  max_conns: 25
+  min_conns: 5

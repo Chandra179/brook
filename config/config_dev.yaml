@@ -19,3 +19,8 @@ profiling:
   enabled: true
   server_address: "http://localhost:4040"
   application_name: "brook.dev"
+
+postgres:
+  dsn: "postgres://brook:brook@localhost:5432/brook?sslmode=disable"
+  max_conns: 10
+  min_conns: 2

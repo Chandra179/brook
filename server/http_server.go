@@ -24,6 +24,7 @@ import (
 	"brook/logger"
 	"brook/middleware"
 	"brook/modules/example"
+	"brook/store"
 )
 
 func RunHttpServer() {
@@ -71,8 +72,17 @@ func RunHttpServer() {
 		log.Fatalf("new logger: %v", err)
 	}
 
+	pool, err := store.NewPool(context.Background(), cfg.Postgres)
+	if err != nil {
+		log.Fatalf("connect postgres: %v", err)
+	}
+	defer pool.Close()
+
 	mdlw := middleware.NewDependencies(logger)
-	exampleDeps := example.NewDependencies(&example.DependenciesConfig{Logger: logger})
+	exampleDeps := example.NewDependencies(&example.DependenciesConfig{
+		Logger: logger,
+		Store:  example.NewPostgresStore(pool),
+	})
 
 	if appEnvironment == "dev" {
 		gin.SetMode(gin.DebugMode)

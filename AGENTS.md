@@ -16,8 +16,10 @@ make up / down        # docker compose up/down
 make modernize        # go fix ./...
 make align            # fieldalignment -fix ./...
 make re               # scripts/rename-module.sh example
-make profiler         # docker run -p 4040:4040 grafana/pyroscope (continuous profiling server)
 make ci               # act workflow_dispatch  (runs GitHub Actions locally via act)
+make migrate-up       # goose -dir store/migrations postgres "$POSTGRES_DSN" up
+make migrate-down     # goose -dir store/migrations postgres "$POSTGRES_DSN" down
+make migrate-create name=<name>  # goose -dir store/migrations create <name> sql
 ```
 
 Integration tests are gated by `-tags=integration`; plain `make test` skips them. Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test → test-integration → build → docker build).
@@ -28,6 +30,7 @@ Integration tests are gated by `-tags=integration`; plain `make test` skips them
 - **Logger**: `go.uber.org/zap` used directly (no wrapper). Built via `logger.NewLogger(appEnvironment)` in `logger/logger.go` — Development for `dev`, else Production. **Not** handled in `config/`.
 - **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`), but no gRPC server is wired in the entrypoint.
 - **No global state**; deps injected via constructor.
+- **Persistence**: `pgx`/`pgxpool`. `store/postgres.go` exports only `NewPool(ctx, config.PostgresConfig)` — shared infra, no domain knowledge. Each module owns its own `Store` interface + Postgres implementation (see `modules/example/interface.go` + `store.go`). Migrations are goose SQL files in `store/migrations/`, applied explicitly via `make migrate-up` (never at server startup). `goose` is intentionally **not** a go.mod dependency — installed on demand via `go install`, same as `golangci-lint`/`swag`.
 
 ## Layout
 
@@ -40,19 +43,25 @@ Integration tests are gated by `-tags=integration`; plain `make test` skips them
 | `config/` | Shared YAML loader + `config_prd.yaml` / `config_dev.yaml` |
 | `logger/` | zap logger constructor |
 | `docs/` | Generated swagger output (do not hand-edit) |
-| `test/integration` | Currently empty; future integration tests |
+| `store/` | Shared pgx pool constructor + goose migrations (`store/migrations/`) |
+| `test/integration` | Build-tagged (`integration`) tests exercising real infra, e.g. Postgres |
 
 ## Config & env
 
 - `APP_ENVIRONMENT` selects the config file: `dev` → `config/config_dev.yaml`, anything else (incl. unset) → `config/config_prd.yaml`. Load with `config.Load(path)` (`config/config.go`).
 - Shared config is **flat** (`http`, `logger`, `middleware`, `profiling`) — not nested per-module. Modules receive only what they need via constructor args.
-- `profiling` (Pyroscope push SDK) is gated by `enabled`; run `make profiler` to start the server it pushes to.
+- `profiling` (Pyroscope push SDK) is gated by `enabled`. This repo only knows Pyroscope's address, not how/where it runs — the collector is owned and operated elsewhere. Reached via `http://host.docker.internal:4040` from the root `docker-compose.yml`'s `brook` service (needs `extra_hosts: host-gateway`, since the collector isn't in this compose file's network), or `http://localhost:4040` for plain `make run`. Don't add a Pyroscope/Grafana service to this repo.
+- `POSTGRES_DSN` env var overrides `postgres.dsn` from the YAML if set (same override pattern as `PYROSCOPE_SERVER_ADDRESS`).
 
 ## Module pattern (`modules/<name>/`)
 
 Flat package. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/http_server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
 
-Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `service.go`, `http_handler.go`, `errors.go`, `constant.go`; no separate `config.go`).
+Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `service.go`, `store.go`, `http_handler.go`, `errors.go`, `constant.go`; no separate `config.go`). `store.go` implements the module's own `Store` interface against a `*pgxpool.Pool`, constructed via `NewPostgresStore(pool)` and wired in from `server/http_server.go` — copy this shape for any module needing persistence.
+
+## Mocks
+
+`.mockery.yaml` has one `packages.brook` entry (module root) with `recursive: true` + `all: true` — it walks the whole module and mocks every interface it finds, so new packages don't need a config entry. Since the generated mock imports the module package it mocks, tests using it must live in `package <mod>_test` (external test package) to avoid an import cycle — see `modules/example/service_test.go`.
 
 ## Middleware order (in `server/http_server.go`)
 

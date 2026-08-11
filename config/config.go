@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	Profiling  ProfilingConfig  `yaml:"profiling"`
 	Logger     LoggerConfig     `yaml:"logger"`
+	Profiling  ProfilingConfig  `yaml:"profiling"`
+	Postgres   PostgresConfig   `yaml:"postgres"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 	HTTP       HTTPConfig       `yaml:"http"`
 }
@@ -45,6 +46,12 @@ type ProfilingConfig struct {
 	Enabled         bool   `yaml:"enabled"`
 }
 
+type PostgresConfig struct {
+	DSN      string `yaml:"dsn"`
+	MaxConns int32  `yaml:"max_conns"`
+	MinConns int32  `yaml:"min_conns"`
+}
+
 func Load(path string) (*Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -59,6 +66,10 @@ func Load(path string) (*Config, error) {
 
 	if addr := os.Getenv("PYROSCOPE_SERVER_ADDRESS"); addr != "" {
 		cfg.Profiling.ServerAddress = addr
+	}
+
+	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
+		cfg.Postgres.DSN = dsn
 	}
 
 	return &cfg, nil

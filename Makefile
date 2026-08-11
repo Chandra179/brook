@@ -1,4 +1,4 @@
-.PHONY: vendor swag mocks test test-integration lint ci run up down re fieldalignment modernize profiler dashboards
+.PHONY: vendor swag mocks test test-integration lint ci run up down re fieldalignment modernize migrate-up migrate-down migrate-create
 
 vendor:
 	go mod tidy && go mod vendor
@@ -42,8 +42,14 @@ align:
 	@which fieldalignment >/dev/null 2>&1 || go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest
 	fieldalignment -fix ./...
 
-profiler:
-	docker compose up -d pyroscope grafana
+migrate-up:
+	@which goose >/dev/null 2>&1 || go install github.com/pressly/goose/v3/cmd/goose@latest
+	goose -dir store/migrations postgres "$$POSTGRES_DSN" up
 
-dashboards:
-	docker compose up -d pyroscope grafana
+migrate-down:
+	@which goose >/dev/null 2>&1 || go install github.com/pressly/goose/v3/cmd/goose@latest
+	goose -dir store/migrations postgres "$$POSTGRES_DSN" down
+
+migrate-create:
+	@which goose >/dev/null 2>&1 || go install github.com/pressly/goose/v3/cmd/goose@latest
+	goose -dir store/migrations create $(name) sql

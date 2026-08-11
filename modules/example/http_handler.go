@@ -1,18 +1,38 @@
 package example
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-// @Summary      Example endpoint
-// @Description  Returns a simple status response
+type createExampleRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
+// @Summary      Create example
+// @Description  Creates and persists an example record
 // @Tags         example
 // @Accept       json
 // @Produce      json
-// @Success      200  {object}  map[string]string
+// @Param        request  body      createExampleRequest  true  "example payload"
+// @Success      201  {object}  Example
 // @Router       /example [post]
 func (d *dependencies) HandleExample(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	var req createExampleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		_ = c.Error(fmt.Errorf("bind create example request: %w", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	ex, err := d.CreateExample(c.Request.Context(), req.Name)
+	if err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, ex)
 }
