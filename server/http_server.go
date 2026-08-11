@@ -15,8 +15,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/grafana/pyroscope-go"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
 	"brook/config"
@@ -25,6 +30,7 @@ import (
 	"brook/middleware"
 	"brook/modules/example"
 	"brook/store"
+	"brook/tracing"
 )
 
 func RunHttpServer() {
@@ -72,13 +78,25 @@ func RunHttpServer() {
 		log.Fatalf("new logger: %v", err)
 	}
 
+	if cfg.Tracing.Enabled {
+		tp, tErr := tracing.NewProvider(context.Background(), cfg.Tracing)
+		if tErr != nil {
+			log.Fatalf("start tracing: %v", tErr)
+		}
+		otel.SetTracerProvider(tp)
+		defer func() { _ = tp.Shutdown(context.Background()) }()
+	}
+
 	pool, err := store.NewPool(context.Background(), cfg.Postgres)
 	if err != nil {
 		log.Fatalf("connect postgres: %v", err)
 	}
 	defer pool.Close()
 
-	mdlw := middleware.NewDependencies(logger)
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
+	mdlw := middleware.NewDependencies(logger, registry)
 	exampleDeps := example.NewDependencies(&example.DependenciesConfig{
 		Logger: logger,
 		Store:  example.NewPostgresStore(pool),
@@ -101,13 +119,16 @@ func RunHttpServer() {
 			)
 			c.AbortWithStatus(http.StatusInternalServerError)
 		}),
+		otelgin.Middleware(cfg.Tracing.ApplicationName),
 		middleware.RequestID,
 		mdlw.RequestLog(cfg.Middleware.RequestLog),
+		mdlw.Metrics(),
 	)
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.POST("/example", exampleDeps.HandleExample)
 

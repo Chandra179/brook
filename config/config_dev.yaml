@@ -10,7 +10,7 @@ logger:
 
 middleware:
   request_log:
-    skip_paths: ["/health"]
+    skip_paths: ["/health", "/metrics"]
     log_query: true
   real_ip:
     trusted_proxies: []
@@ -18,6 +18,11 @@ middleware:
 profiling:
   enabled: true
   server_address: "http://localhost:4040"
+  application_name: "brook.dev"
+
+tracing:
+  enabled: true
+  otlp_endpoint: "localhost:4317"
   application_name: "brook.dev"
 
 postgres:

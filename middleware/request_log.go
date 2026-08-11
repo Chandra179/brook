@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"brook/config"
@@ -37,6 +38,10 @@ func (d *dependencies) RequestLog(cfg config.RequestLogConfig) gin.HandlerFunc {
 
 		if reqID := GetRequestID(c.Request.Context()); reqID != "" {
 			fields = append(fields, zap.String("request_id", reqID))
+		}
+
+		if sc := trace.SpanContextFromContext(c.Request.Context()); sc.IsValid() {
+			fields = append(fields, zap.String("trace_id", sc.TraceID().String()))
 		}
 
 		if cfg.LogQuery && c.Request.URL.RawQuery != "" {

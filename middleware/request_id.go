@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -33,12 +34,18 @@ func GetRequestID(ctx context.Context) string {
 }
 
 // RequestID is a Gin middleware that reads X-Request-ID from the request
-// header, reusing it if present or generating a new one. The ID is stored
-// in the request context and echoed in the response header.
+// header, reusing it if present. Otherwise it reuses the OTel trace ID from
+// an already-started span (see otelgin, which must run before this), if
+// one exists, or generates a random one. The ID is stored in the request
+// context and echoed in the response header.
 func RequestID(c *gin.Context) {
 	id := c.GetHeader(headerKey)
 	if id == "" {
-		id = generateRequestID()
+		if sc := trace.SpanContextFromContext(c.Request.Context()); sc.IsValid() {
+			id = sc.TraceID().String()
+		} else {
+			id = generateRequestID()
+		}
 	}
 	c.Header(headerKey, id)
 	c.Request = c.Request.WithContext(storeRequestID(c.Request.Context(), id))

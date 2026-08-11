@@ -31,6 +31,8 @@ Integration tests are gated by `-tags=integration`; plain `make test` skips them
 - **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`), but no gRPC server is wired in the entrypoint.
 - **No global state**; deps injected via constructor.
 - **Persistence**: `pgx`/`pgxpool`. `store/postgres.go` exports only `NewPool(ctx, config.PostgresConfig)` — shared infra, no domain knowledge. Each module owns its own `Store` interface + Postgres implementation (see `modules/example/interface.go` + `store.go`). Migrations are goose SQL files in `store/migrations/`, applied explicitly via `make migrate-up` (never at server startup). `goose` is intentionally **not** a go.mod dependency — installed on demand via `go install`, same as `golangci-lint`/`swag`.
+- **Tracing**: OpenTelemetry SDK (`tracing/tracing.go`'s `NewProvider`), gated by `tracing.enabled`, exporting via OTLP/gRPC. Same address-only rule as Pyroscope — only `tracing.otlp_endpoint` is known here, the collector (Grafana Alloy → Tempo) is owned externally. `otelgin.Middleware` always runs (no-op when disabled); `middleware.RequestID` reuses its span's trace ID as the request ID when no `X-Request-ID` header is present.
+- **Metrics**: `github.com/prometheus/client_golang` at `/metrics` (exposition format, scraped by Alloy — no Prometheus server here). Metric vectors live on a `*prometheus.Registry` built once in `server/http_server.go` and injected into `middleware.NewDependencies` — no global registry.
 
 ## Layout
 
@@ -42,6 +44,7 @@ Integration tests are gated by `-tags=integration`; plain `make test` skips them
 | `middleware/` | Gin middleware + gRPC interceptor. See `middleware/README.md` |
 | `config/` | Shared YAML loader + `config_prd.yaml` / `config_dev.yaml` |
 | `logger/` | zap logger constructor |
+| `tracing/` | OTel `TracerProvider` constructor (OTLP/gRPC exporter) |
 | `docs/` | Generated swagger output (do not hand-edit) |
 | `store/` | Shared pgx pool constructor + goose migrations (`store/migrations/`) |
 | `test/integration` | Build-tagged (`integration`) tests exercising real infra, e.g. Postgres |
@@ -51,6 +54,7 @@ Integration tests are gated by `-tags=integration`; plain `make test` skips them
 - `APP_ENVIRONMENT` selects the config file: `dev` → `config/config_dev.yaml`, anything else (incl. unset) → `config/config_prd.yaml`. Load with `config.Load(path)` (`config/config.go`).
 - Shared config is **flat** (`http`, `logger`, `middleware`, `profiling`) — not nested per-module. Modules receive only what they need via constructor args.
 - `profiling` (Pyroscope push SDK) is gated by `enabled`. This repo only knows Pyroscope's address, not how/where it runs — the collector is owned and operated elsewhere. Reached via `http://host.docker.internal:4040` from the root `docker-compose.yml`'s `brook` service (needs `extra_hosts: host-gateway`, since the collector isn't in this compose file's network), or `http://localhost:4040` for plain `make run`. Don't add a Pyroscope/Grafana service to this repo.
+- `tracing` (OTel SDK) is gated by `enabled`, same address-only rule: only `otlp_endpoint` is known, Alloy is owned externally. `OTEL_EXPORTER_OTLP_ENDPOINT` env var overrides `tracing.otlp_endpoint` if set.
 - `POSTGRES_DSN` env var overrides `postgres.dsn` from the YAML if set (same override pattern as `PYROSCOPE_SERVER_ADDRESS`).
 
 ## Module pattern (`modules/<name>/`)
@@ -66,10 +70,10 @@ Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `int
 ## Middleware order (in `server/http_server.go`)
 
 ```
-gin.CustomRecovery → RequestID → RequestLog → handler
+gin.CustomRecovery → otelgin.Middleware → RequestID → RequestLog → Metrics → handler
 ```
 
-All in `middleware/`. Request ID stored in `context.Context` (shared HTTP/gRPC); retrieve via `middleware.GetRequestID(ctx)`.
+All in `middleware/` (except `otelgin.Middleware`, from `go.opentelemetry.io/contrib`). Request ID stored in `context.Context` (shared HTTP/gRPC); retrieve via `middleware.GetRequestID(ctx)`.
 
 ## Creating a new module
 

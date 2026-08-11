@@ -9,6 +9,7 @@ import (
 type Config struct {
 	Logger     LoggerConfig     `yaml:"logger"`
 	Profiling  ProfilingConfig  `yaml:"profiling"`
+	Tracing    TracingConfig    `yaml:"tracing"`
 	Postgres   PostgresConfig   `yaml:"postgres"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 	HTTP       HTTPConfig       `yaml:"http"`
@@ -46,6 +47,12 @@ type ProfilingConfig struct {
 	Enabled         bool   `yaml:"enabled"`
 }
 
+type TracingConfig struct {
+	OTLPEndpoint    string `yaml:"otlp_endpoint"`
+	ApplicationName string `yaml:"application_name"`
+	Enabled         bool   `yaml:"enabled"`
+}
+
 type PostgresConfig struct {
 	DSN      string `yaml:"dsn"`
 	MaxConns int32  `yaml:"max_conns"`
@@ -66,6 +73,10 @@ func Load(path string) (*Config, error) {
 
 	if addr := os.Getenv("PYROSCOPE_SERVER_ADDRESS"); addr != "" {
 		cfg.Profiling.ServerAddress = addr
+	}
+
+	if addr := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); addr != "" {
+		cfg.Tracing.OTLPEndpoint = addr
 	}
 
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {

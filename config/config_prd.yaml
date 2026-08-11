@@ -10,7 +10,7 @@ logger:
 
 middleware:
   request_log:
-    skip_paths: ["/health"]
+    skip_paths: ["/health", "/metrics"]
     log_query: true
   real_ip:
     trusted_proxies: []
@@ -18,6 +18,11 @@ middleware:
 profiling:
   enabled: false
   server_address: "http://pyroscope:4040"
+  application_name: "brook"
+
+tracing:
+  enabled: false
+  otlp_endpoint: "alloy:4317"
   application_name: "brook"
 
 postgres:

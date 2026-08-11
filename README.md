@@ -20,6 +20,7 @@ modules/                # domain modules
 middleware/              # shared: recovery, request ID, request logging
 config/                  # YAML loader + config_dev.yaml / config_prd.yaml
 logger/                  # zap logger constructor
+tracing/                 # OTel TracerProvider constructor (OTLP/gRPC exporter)
 store/                   # shared pgx pool constructor + goose migrations (store/migrations/)
 docs/                    # generated swagger output (do not hand-edit)
 test/integration/        # build-tagged (integration) tests exercising real infra
@@ -71,5 +72,6 @@ To run a single test: `go test -run TestName ./modules/example/...`.
 - Shared config is flat (`http`, `logger`, `middleware`, `profiling`, `postgres`) — not nested per-module.
 - No global state — deps injected via constructor.
 - Persistence: `pgx`/`pgxpool`, wrapped behind a per-module `Store` interface so a future DB swap is contained to one module. `store/` only owns the shared pool constructor and goose migrations — no domain knowledge. This repo only knows Pyroscope's address (continuous profiling), not how/where the collector runs — that's owned externally.
+- Observability: OTel tracing (`tracing/`, OTLP/gRPC export, gated by `tracing.enabled`) and a Prometheus-exposition-format `/metrics` endpoint — both scraped/received by Grafana Alloy, same "address only, collector owned externally" rule as Pyroscope. No Prometheus server, no Alloy config, lives in this repo. `middleware.RequestID` reuses the request's OTel trace ID when no `X-Request-ID` header is supplied, so logs/traces/responses correlate on one ID.
 
 See `CLAUDE.md` / `AGENTS.md` for full architectural and workflow details.
