@@ -5,16 +5,24 @@ Go modular monolith skeleton. One binary, domain modules as Go packages. Split t
 ## Layout
 
 ```
-cmd/example/main.go   # entrypoint — starts HTTP + gRPC
-api/
-modules/              # domain modules
-  example/            #   example module
-    config.go         #     module-specific config struct
-    dependencies.go   #     wire deps, load own config
-    http_handler.go   #     HTTP handlers
-middleware/           # shared: recovery, request ID, timeout, validation
-config/               # YAML loader + config.yaml
-test/integration      # integration test decoupled from core business
+cmd/example/main.go     # entrypoint — starts HTTP server
+server/                 # assembles Gin router, middleware, graceful shutdown
+modules/                # domain modules
+  example/              #   reference module
+    dependencies.go     #     wire deps, construct services/store
+    types.go             #    domain types
+    interface.go         #    Store interface
+    service.go            #   business logic
+    store.go               #  Postgres-backed Store implementation
+    http_handler.go        #  HTTP handlers
+    errors.go              #  sentinel/custom errors
+    constant.go            #  module constants
+middleware/              # shared: recovery, request ID, request logging
+config/                  # YAML loader + config_dev.yaml / config_prd.yaml
+logger/                  # zap logger constructor
+store/                   # shared pgx pool constructor + goose migrations (store/migrations/)
+docs/                    # generated swagger output (do not hand-edit)
+test/integration/        # build-tagged (integration) tests exercising real infra
 ```
 
 ## Renaming the project
@@ -32,25 +40,36 @@ Example:
 scripts/rename-module.sh github.com/myorg/myproject
 ```
 
-Updates `go.mod` and all import paths (e.g. `"brook/middleware"` → `"github.com/myorg/myproject/middleware"`).
+Updates `go.mod`, all import paths (e.g. `"brook/middleware"` → `"github.com/myorg/myproject/middleware"`), and `.golangci.yml`'s `local-prefixes`.
 Run `go build ./...` after to verify.
 
 ## Commands
 
 ```bash
-make vendor          # go mod tidy && go mod vendor
-go run cmd/example/main.go
-go build ./...
-go test ./modules/...
+make run              # go run ./cmd/example/
+make test             # go test -short -race -count=1 ./...  (unit only, skips integration)
+make test-integration # go test -tags=integration -race -count=1 -v ./...
+make lint             # golangci-lint run
+make vendor           # go mod tidy && go mod vendor
+make swag             # swag init -g cmd/example/main.go -o docs
+make mocks            # go tool mockery
+make up / down        # docker compose up/down
+make modernize        # go fix ./...
+make align            # fieldalignment -fix ./...
+make migrate-up       # goose -dir store/migrations postgres "$POSTGRES_DSN" up
+make migrate-down     # goose -dir store/migrations postgres "$POSTGRES_DSN" down
+make migrate-create name=<name>  # goose -dir store/migrations create <name> sql
 ```
 
-## State
-
-Mid-restructure. Single module (`example`). One entrypoint binary. Basic test coverage on config loading + DI wiring.
+To run a single test: `go test -run TestName ./modules/example/...`.
 
 ## Design choices
 
-- Validation via `middleware.DecodeAndValidate[T](r)` inside handlers
-- No `internal/` sub-packages inside modules
-- Config struct per module, YAML section per module key
-- No global state — deps injected via closure or struct field
+- Framework: Gin. Handlers are `gin.HandlerFunc` methods on a module's unexported `*dependencies` struct.
+- Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
+- No `internal/` sub-packages inside modules.
+- Shared config is flat (`http`, `logger`, `middleware`, `profiling`, `postgres`) — not nested per-module.
+- No global state — deps injected via constructor.
+- Persistence: `pgx`/`pgxpool`, wrapped behind a per-module `Store` interface so a future DB swap is contained to one module. `store/` only owns the shared pool constructor and goose migrations — no domain knowledge. This repo only knows Pyroscope's address (continuous profiling), not how/where the collector runs — that's owned externally.
+
+See `CLAUDE.md` / `AGENTS.md` for full architectural and workflow details.
