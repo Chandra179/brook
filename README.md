@@ -23,7 +23,6 @@ logger/                  # zap logger constructor
 tracing/                 # OTel TracerProvider constructor (OTLP/gRPC exporter)
 store/                   # shared pgx pool constructor + goose migrations (store/migrations/)
 docs/                    # generated swagger output (do not hand-edit)
-test/integration/        # build-tagged (integration) tests exercising real infra
 ```
 
 ## Renaming the project
@@ -48,8 +47,7 @@ Run `go build ./...` after to verify.
 
 ```bash
 make run              # go run ./cmd/example/
-make test             # go test -short -race -count=1 ./...  (unit only, skips integration)
-make test-integration # go test -tags=integration -race -count=1 -v ./...
+make test             # go test -short -race -count=1 ./...
 make lint             # golangci-lint run
 make vendor           # go mod tidy && go mod vendor
 make swag             # swag init -g cmd/example/main.go -o docs

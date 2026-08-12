@@ -6,8 +6,7 @@ Go modular monolith skeleton. Module `brook`, Go `1.26.5`. One binary, domain mo
 
 ```bash
 make run              # go run ./cmd/example/
-make test             # go test -short -race -count=1 ./...  (unit only, skips integration)
-make test-integration # go test -tags=integration -race -count=1 -v ./...
+make test             # go test -short -race -count=1 ./...
 make lint             # golangci-lint run  (v2 config in .golangci.yml)
 make vendor           # go mod tidy && go mod vendor
 make swag             # swag init -g cmd/example/main.go -o docs
@@ -22,7 +21,7 @@ make migrate-down     # goose -dir store/migrations postgres "$POSTGRES_DSN" dow
 make migrate-create name=<name>  # goose -dir store/migrations create <name> sql
 ```
 
-Integration tests are gated by `-tags=integration`; plain `make test` skips them. Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test → test-integration → build → docker build).
+Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test → build → docker build).
 
 ## Architecture
 
@@ -47,7 +46,6 @@ Integration tests are gated by `-tags=integration`; plain `make test` skips them
 | `tracing/` | OTel `TracerProvider` constructor (OTLP/gRPC exporter) |
 | `docs/` | Generated swagger output (do not hand-edit) |
 | `store/` | Shared pgx pool constructor + goose migrations (`store/migrations/`) |
-| `test/integration` | Build-tagged (`integration`) tests exercising real infra, e.g. Postgres |
 
 ## Config & env
 
