@@ -1,79 +1,75 @@
 # Error Handling Standards
 
-This document defines how we handle, wrap, and inspect errors across our Go codebases. Following these standards ensures consistent logs and predictable error handling behavior.
+How we wrap, inspect, and surface errors across layers.
 
 ---
 
-## 1. Golden Rules
-* **Never swallow errors.** Always log, wrap, or return them.
-* **Context is king.** Every time an error moves up an architectural layer, add context using wrapping if it aids debugging.
-* **Sanitize external errors.** Never expose internal database or system errors directly to the API client.
+## Rules
 
----
+* **Never swallow errors** — use error wrapping (%w)
+* **Add context on the way up.** Each layer an error crosses, wrap with
+  what was being attempted.
+* **Sanitize external errors.** Never expose a raw DB/system error to an
+  API client.
 
-## 2. When to Use Wrapping (`%w`)
-Use `fmt.Errorf("...: %w", err)` when an error crosses architectural boundaries (e.g., DB -> Service -> Transport) and the caller up the chain might need to programmatically inspect the root cause.
+## Wrapping: `%w` vs `%v`
 
-### Standard Layered Pattern:
-1. **Infra Layer:** Returns a raw sentinel error or domain error (e.g., `db.ErrNotFound`).
-2. **Business Layer:** Wraps the error to add business context (e.g., `fmt.Errorf("failed to fetch user %s: %w", userID, err)`).
-3. **API Layer:** Uses `errors.Is` or `errors.As` to decide the HTTP status code, then logs the full error chain.
+Use `fmt.Errorf("...: %w", err)` when a caller up the chain might need
+`errors.Is`/`errors.As` on the root cause. Use `%v` to deliberately
+obfuscate before crossing a package boundary you don't control.
+
+## Layered pattern
+
+1. **Infra layer** recognizes a driver/library sentinel (e.g. `pgx.ErrNoRows`)
+   with `errors.Is` and translates it into a domain sentinel owned by that
+   module (e.g. `ErrUserNotFound`, in that module's own `business_error.go`). A
+   domain sentinel is a plain `errors.New(...)` value — it imports nothing
+   beyond stdlib `errors`, so the module stays fully unaware of HTTP.
+2. **Business layer** wraps it with context: `fmt.Errorf("fetch user %s: %w", id, err)`.
+   It doesn't inspect or decide status codes — it has no notion of HTTP.
+3. **Transport layer** is the only layer allowed to know about HTTP status
+   codes, so it's the only layer allowed to inspect the error: the handler
+   uses `errors.Is` against the module's own domain sentinels and calls
+   `c.JSON` with the status itself — see [`logging.md`](logging.md) for
+   how it gets logged from there.
 
 ```go
-// Good Practice: Adding relevant context while preserving the underlying error
-if err != nil {
-    return fmt.Errorf("failed to process payment for order %s: %w", orderID, err)
-}
-```
+// modules/example/business_error.go — domain sentinel, no non-stdlib imports
+var ErrUserNotFound = errors.New("user not found")
 
-## Example
-```go
-package user
-
-import (
-	"errors"
-	"fmt"
-)
-
-// 1. Infrastructure Layer (e.g., database)
-var ErrUserNotFound = errors.New("user not found in DB")
-
+// infra layer
 func (r *Repository) FetchUser(id string) (*User, error) {
-	// If database fails, return the base sentinel error
-	return nil, ErrUserNotFound
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("fetch user %s: %w", id, ErrUserNotFound)
+	}
+	...
 }
 
-// 2. Service Layer (Business Logic)
+// business layer
 func (s *Service) GetUserProfile(id string) (*Profile, error) {
 	user, err := s.repo.FetchUser(id)
 	if err != nil {
-		// WRAP IT: Add business context (what were we doing? who failed?)
-		return nil, fmt.Errorf("failed to load profile for user %s: %w", id, err)
+		return nil, fmt.Errorf("load profile for user %s: %w", id, err)
 	}
 	return &Profile{Name: user.Name}, nil
 }
 
-// 3. Transport Layer (HTTP Handler)
-func (c *Controller) HandleGetUser(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	profile, err := c.service.GetUserProfile(id)
-	
+// transport layer — the only place that maps a domain condition to a status
+func (h *handler) HandleGetUser(c *gin.Context) {
+	profile, err := h.service.GetUserProfile(c.Param("id"))
 	if err != nil {
-		// WRAP IT: Add the top-level application context for logging
-		finalErr := fmt.Errorf("http handler failure: %w", err)
-		
-		// This prints: "LOG: http handler failure: failed to load profile for user 123: user not found in DB"
-		log.Println("LOG:", finalErr) 
-
-		// Inspect the root cause to send the correct HTTP response
-		if errors.Is(finalErr, ErrUserNotFound) {
-			http.Error(w, "User profile does not exist", http.StatusNotFound)
+		_ = c.Error(err)
+		if errors.Is(err, ErrUserNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
-	
-	json.NewEncoder(w).Encode(profile)
+	c.JSON(http.StatusOK, profile)
 }
 ```
+
+A request-binding failure follows the same shape — no sentinel to check,
+just `c.JSON(http.StatusBadRequest, ...)` directly — see
+`modules/example/handler.go`.

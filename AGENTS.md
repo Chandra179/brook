@@ -31,14 +31,14 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 - **No global state**; deps injected via constructor.
 - **Persistence**: `pgx`/`pgxpool`. `store/postgres.go` exports only `NewPool(ctx, config.PostgresConfig)` — shared infra, no domain knowledge. Each module owns its own `Store` interface + Postgres implementation (see `modules/example/interface.go` + `store.go`). Migrations are goose SQL files in `store/migrations/`, applied explicitly via `make migrate-up` (never at server startup). `goose` is intentionally **not** a go.mod dependency — installed on demand via `go install`, same as `golangci-lint`/`swag`.
 - **Tracing**: OpenTelemetry SDK (`tracing/tracing.go`'s `NewProvider`), gated by `tracing.enabled`, exporting via OTLP/gRPC. Same address-only rule as Pyroscope — only `tracing.otlp_endpoint` is known here, the collector (Grafana Alloy → Tempo) is owned externally. `otelgin.Middleware` always runs (no-op when disabled); `middleware.RequestID` reuses its span's trace ID as the request ID when no `X-Request-ID` header is present.
-- **Metrics**: `github.com/prometheus/client_golang` at `/metrics` (exposition format, scraped by Alloy — no Prometheus server here). Metric vectors live on a `*prometheus.Registry` built once in `server/http_server.go` and injected into `middleware.NewDependencies` — no global registry.
+- **Metrics**: `github.com/prometheus/client_golang` at `/metrics` (exposition format, scraped by Alloy — no Prometheus server here). Metric vectors live on a `*prometheus.Registry` built once in `server/server.go` and injected into `middleware.NewDependencies` — no global registry.
 
 ## Layout
 
 | Path | Role |
 |------|------|
 | `cmd/example/main.go` | Entrypoint → `server.RunHttpServer()` |
-| `server/http_server.go` | Assembles Gin router, registers middleware/routes, graceful shutdown |
+| `server/server.go` | Assembles Gin router, registers middleware/routes, graceful shutdown |
 | `modules/<name>/` | Flat domain module package |
 | `middleware/` | Gin middleware + gRPC interceptor. See `middleware/README.md` |
 | `config/` | Shared YAML loader + `config_prd.yaml` / `config_dev.yaml` |
@@ -57,15 +57,15 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 
 ## Module pattern (`modules/<name>/`)
 
-Flat package. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/http_server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
+Flat package. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
 
-Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `service.go`, `store.go`, `http_handler.go`, `errors.go`, `constant.go`; no separate `config.go`). `store.go` implements the module's own `Store` interface against a `*pgxpool.Pool`, constructed via `NewPostgresStore(pool)` and wired in from `server/http_server.go` — copy this shape for any module needing persistence.
+Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `service.go`, `store.go`, `handler.go`, `business_error.go`, `constant.go`; no separate `config.go`). `store.go` implements the module's own `Store` interface against a `*pgxpool.Pool`, constructed via `NewPostgresStore(pool)` and wired in from `server/server.go` — copy this shape for any module needing persistence. `business_error.go` holds the module's own domain sentinels (plain `errors.New(...)`, no non-stdlib imports); the handler checks `errors.Is` against them and picks the HTTP status itself.
 
 ## Mocks
 
 `.mockery.yaml` has one `packages.brook` entry (module root) with `recursive: true` + `all: true` — it walks the whole module and mocks every interface it finds, so new packages don't need a config entry. Since the generated mock imports the module package it mocks, tests using it must live in `package <mod>_test` (external test package) to avoid an import cycle — see `modules/example/service_test.go`.
 
-## Middleware order (in `server/http_server.go`)
+## Middleware order (in `server/server.go`)
 
 ```
 gin.CustomRecovery → otelgin.Middleware → RequestID → RequestLog → Metrics → handler
@@ -75,7 +75,7 @@ All in `middleware/` (except `otelgin.Middleware`, from `go.opentelemetry.io/con
 
 ## Creating a new module
 
-Copy `modules/example/`, rename the package, wire deps in `dependencies.go`, and register its handlers in `server/http_server.go`. No config section needed (shared config is flat).
+Copy `modules/example/`, rename the package, wire deps in `dependencies.go`, and register its handlers in `server/server.go`. No config section needed (shared config is flat).
 
 ## Renaming project
 

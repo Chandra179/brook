@@ -14,9 +14,9 @@ modules/                # domain modules
     interface.go         #    Store interface
     service.go            #   business logic
     store.go               #  Postgres-backed Store implementation
-    http_handler.go        #  HTTP handlers
-    errors.go              #  sentinel/custom errors
-    constant.go            #  module constants
+    handler.go              # HTTP handlers
+    business_error.go       # domain sentinels/custom errors
+    constant.go             # module constants
 middleware/              # shared: recovery, request ID, request logging
 config/                  # YAML loader + config_dev.yaml / config_prd.yaml
 logger/                  # zap logger constructor

@@ -34,4 +34,13 @@ func TestCreateExample(t *testing.T) {
 
 		require.Error(t, err)
 	})
+
+	t.Run("rejects a reserved name without calling the store", func(t *testing.T) {
+		store := mocks.NewMockStore(t)
+
+		_, err := brookexample.NewDependencies(&brookexample.DependenciesConfig{Store: store}).
+			CreateExample(context.Background(), "admin")
+
+		require.ErrorIs(t, err, brookexample.ErrReservedName)
+	})
 }

@@ -35,7 +35,7 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 - **No global state**; deps injected via constructor, no `init()`.
 - **Continuous profiling**: Pyroscope push SDK, gated by `profiling.enabled` in config. This repo only knows Pyroscope's address, not how/where it runs — the collector is owned and operated elsewhere. The root `docker-compose.yml`'s `brook` service reaches it via `http://host.docker.internal:4040` (with `extra_hosts: host-gateway`, since the collector isn't in this compose file's network); plain `make run` reaches it via `http://localhost:4040` (`config/config_dev.yaml`). Don't add a Pyroscope/Grafana service to this repo's compose file or Makefile — that's infra this repo shouldn't own.
 - **Tracing**: OpenTelemetry SDK, gated by `tracing.enabled`, exporting spans via OTLP/gRPC (`tracing/tracing.go`'s `NewProvider`) — same address-only rule as Pyroscope: this repo only knows the OTLP endpoint (`tracing.otlp_endpoint` / `OTEL_EXPORTER_OTLP_ENDPOINT`), the collector (Grafana Alloy, forwarding to Tempo) is owned externally. `otelgin.Middleware` starts a span per request and is always registered (no-op when disabled); `middleware.RequestID` reuses that span's trace ID as the request ID when no `X-Request-ID` header is supplied, so logs/traces/responses share one ID.
-- **Metrics**: `github.com/prometheus/client_golang` exposition format at `/metrics`, scraped by Alloy — no Prometheus server in this repo. Metric vectors live on a `*prometheus.Registry` constructed once in `server/http_server.go` and injected into `middleware.NewDependencies` (no global registry, no `init()`), registered by `middleware.Metrics()`.
+- **Metrics**: `github.com/prometheus/client_golang` exposition format at `/metrics`, scraped by Alloy — no Prometheus server in this repo. Metric vectors live on a `*prometheus.Registry` constructed once in `server/server.go` and injected into `middleware.NewDependencies` (no global registry, no `init()`), registered by `middleware.Metrics()`.
 - **Persistence**: `pgx`/`pgxpool` (not `sqlx`/`lib/pq`). `store/postgres.go` exports only `NewPool(ctx, config.PostgresConfig) (*pgxpool.Pool, error)` — shared infra, like `logger/`, with no knowledge of module domain types. Each module defines the `Store` interface it needs in its own `interface.go` and implements it against the pool in its own package (see `modules/example/interface.go` + `store.go`) — persistence is domain logic per `modules/README.md`, so a future DB swap is contained to one module's store file, not scattered. Migrations are goose SQL files in `store/migrations/`, applied via `make migrate-up` — never auto-run at server startup. `goose` itself is **not** a go.mod dependency (its driver-per-database footprint is large); it's installed on demand via `go install` in the Makefile, same treatment as `golangci-lint`/`swag`/`act`.
 
 ## Layout
@@ -43,7 +43,7 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 | Path | Role |
 |------|------|
 | `cmd/example/main.go` | Entrypoint → `server.RunHttpServer()` |
-| `server/http_server.go` | Assembles Gin router, registers middleware/routes, graceful shutdown |
+| `server/server.go` | Assembles Gin router, registers middleware/routes, graceful shutdown |
 | `modules/<name>/` | Flat domain module package |
 | `middleware/` | Gin middleware + gRPC interceptor. See `middleware/README.md` |
 | `config/` | Shared YAML loader + `config_prd.yaml` / `config_dev.yaml` |
@@ -62,15 +62,15 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 
 ## Module pattern (`modules/<name>/`)
 
-Flat package, no `internal/` sub-packages. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/http_server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers (no separate validation middleware).
+Flat package, no `internal/` sub-packages. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers (no separate validation middleware).
 
-Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `service.go`, `store.go`, `http_handler.go`, `errors.go`, `constant.go`; no separate `config.go` — no config section needed since shared config is flat). `store.go` holds the Postgres-backed implementation of the module's own `Store` interface (declared in `interface.go`), constructed with `NewPostgresStore(pool)` and wired in from `server/http_server.go` — copy this shape for any module that needs persistence.
+Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `service.go`, `store.go`, `handler.go`, `business_error.go`, `constant.go`; no separate `config.go` — no config section needed since shared config is flat). `store.go` holds the Postgres-backed implementation of the module's own `Store` interface (declared in `interface.go`), constructed with `NewPostgresStore(pool)` and wired in from `server/server.go` — copy this shape for any module that needs persistence. `business_error.go` holds the module's own domain sentinels (plain `errors.New(...)` values, no non-stdlib imports) — the handler checks `errors.Is` against them itself and picks the HTTP status, since HTTP is a transport concern the module has no business knowing about.
 
-Required files per module: `dependencies.go` (wire deps, load config, construct services), `types.go` (domain types/structs/constants). Optional: `http_handler.go`, one file per handler/operation (e.g. `create_order.go`).
+Required files per module: `dependencies.go` (wire deps, load config, construct services), `types.go` (domain types/structs/constants). Optional: `handler.go`, one file per handler/operation (e.g. `create_order.go`).
 
-To create a new module: copy `modules/example/`, rename the package, wire deps in `dependencies.go`, and register its handlers in `server/http_server.go`.
+To create a new module: copy `modules/example/`, rename the package, wire deps in `dependencies.go`, and register its handlers in `server/server.go`.
 
-## Middleware order (in `server/http_server.go`)
+## Middleware order (in `server/server.go`)
 
 ```
 gin.CustomRecovery → otelgin.Middleware → RequestID → RequestLog → Metrics → handler
@@ -85,8 +85,9 @@ All in `middleware/` (except `otelgin.Middleware`, from `go.opentelemetry.io/con
 - **Handle errors once**: don't `log.Error(err); return err` in the same function. `RequestLog` (`middleware/request_log.go`) is the single logging boundary for HTTP requests — every layer below wraps and returns, nothing below it logs.
 - **Wrap with `%w`** when a caller up the chain might need `errors.Is`/`errors.As` on the root cause; use `%v` to deliberately obfuscate before crossing a package boundary you don't control.
 - To surface an error from a handler: call `c.Error(err)` before writing the response — `RequestLog` attaches it to the canonical request log line. Don't call the logger directly from a handler.
+- A module's domain errors stay plain sentinels/types with no non-stdlib imports — HTTP knowledge belongs only in the transport layer, so a handler that needs a specific status checks `errors.Is(err, module.ErrFoo)` itself and picks the status inline (see `modules/example/handler.go`). `errors.Is` for recognizing driver/library sentinels belongs at the infra layer (store), translating them into the module's own domain sentinel.
 - Log level tracks response status, not developer judgment: Info (2xx/3xx), Warn (4xx), Error (5xx) — derived automatically by `RequestLog`.
-- **Exit once, from `main()` only**: `os.Exit`/`log.Fatal` belong in `cmd/*/main.go` or the top-level `Run*` function (`server/http_server.go`), never in a library/service/store function.
+- **Exit once, from `main()` only**: `os.Exit`/`log.Fatal` belong in `cmd/*/main.go` or the top-level `Run*` function (`server/server.go`), never in a library/service/store function.
 - Verify interface compliance at compile time: `var _ Interface = (*Type)(nil)` next to the type definition.
 - Sentinel errors: exported `ErrFoo`, unexported `errFoo`, custom error types `FooError`.
 - Import order enforced by `goimports` with `local-prefixes: brook` (`.golangci.yml`): stdlib, blank line, everything else (third-party and `brook/...` separated too).

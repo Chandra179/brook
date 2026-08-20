@@ -1,6 +1,7 @@
 package example
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -30,6 +31,12 @@ func (d *dependencies) HandleExample(c *gin.Context) {
 	ex, err := d.CreateExample(c.Request.Context(), req.Name)
 	if err != nil {
 		_ = c.Error(err)
+
+		if errors.Is(err, ErrReservedName) {
+			c.JSON(http.StatusConflict, gin.H{"error": "name is reserved"})
+			return
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
