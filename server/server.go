@@ -29,6 +29,7 @@ import (
 	"brook/logger"
 	"brook/middleware"
 	"brook/modules/example"
+	"brook/modules/foo"
 	"brook/store"
 	"brook/tracing"
 )
@@ -101,6 +102,10 @@ func RunHttpServer() {
 		Logger: logger,
 		Store:  example.NewPostgresStore(pool),
 	})
+	fooDeps := foo.NewDependencies(&foo.DependenciesConfig{
+		Logger:  logger,
+		Example: exampleDeps,
+	})
 
 	if appEnvironment == "dev" {
 		gin.SetMode(gin.DebugMode)
@@ -131,6 +136,7 @@ func RunHttpServer() {
 	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.POST("/example", exampleDeps.HandleExample)
+	r.POST("/foo", fooDeps.HandleFoo)
 
 	addr := fmt.Sprintf(":%s", cfg.HTTP.Port)
 	srv := &http.Server{

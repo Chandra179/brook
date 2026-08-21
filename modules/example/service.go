@@ -5,6 +5,12 @@ import (
 	"fmt"
 )
 
+type Service interface {
+	CreateExample(ctx context.Context, name string) (*Example, error)
+}
+
+var _ Service = (*dependencies)(nil)
+
 func (d *dependencies) CreateExample(ctx context.Context, name string) (*Example, error) {
 	if name == reservedName {
 		return nil, fmt.Errorf("create example %q: %w", name, ErrReservedName)
