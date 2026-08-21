@@ -29,7 +29,7 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 - **Logger**: `go.uber.org/zap` used directly (no wrapper). Built via `logger.NewLogger(appEnvironment)` in `logger/logger.go` — Development for `dev`, else Production. **Not** handled in `config/`.
 - **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`), but no gRPC server is wired in the entrypoint.
 - **No global state**; deps injected via constructor.
-- **Persistence**: `pgx`/`pgxpool`. `store/postgres.go` exports only `NewPool(ctx, config.PostgresConfig)` — shared infra, no domain knowledge. Each module owns its own `Store` interface + Postgres implementation (see `modules/example/interface.go` + `store.go`). Migrations are goose SQL files in `store/migrations/`, applied explicitly via `make migrate-up` (never at server startup). `goose` is intentionally **not** a go.mod dependency — installed on demand via `go install`, same as `golangci-lint`/`swag`.
+- **Persistence**: `pgx`/`pgxpool`. `store/postgres.go` exports only `NewPool(ctx, config.PostgresConfig)` — shared infra, no domain knowledge. Each module owns its own `Store` interface + Postgres implementation together in its own `store.go` (see `modules/example/store.go`). Migrations are goose SQL files in `store/migrations/`, applied explicitly via `make migrate-up` (never at server startup). `goose` is intentionally **not** a go.mod dependency — installed on demand via `go install`, same as `golangci-lint`/`swag`.
 - **Tracing**: OpenTelemetry SDK (`tracing/tracing.go`'s `NewProvider`), gated by `tracing.enabled`, exporting via OTLP/gRPC. Same address-only rule as Pyroscope — only `tracing.otlp_endpoint` is known here, the collector (Grafana Alloy → Tempo) is owned externally. `otelgin.Middleware` always runs (no-op when disabled); `middleware.RequestID` reuses its span's trace ID as the request ID when no `X-Request-ID` header is present.
 - **Metrics**: `github.com/prometheus/client_golang` at `/metrics` (exposition format, scraped by Alloy — no Prometheus server here). Metric vectors live on a `*prometheus.Registry` built once in `server/server.go` and injected into `middleware.NewDependencies` — no global registry.
 
@@ -57,9 +57,15 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 
 ## Module pattern (`modules/<name>/`)
 
-Flat package. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
+Flat package, no `internal/` sub-packages. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
 
-Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `service.go`, `store.go`, `handler.go`, `business_error.go`, `constant.go`; no separate `config.go`). `store.go` implements the module's own `Store` interface against a `*pgxpool.Pool`, constructed via `NewPostgresStore(pool)` and wired in from `server/server.go` — copy this shape for any module needing persistence. `business_error.go` holds the module's own domain sentinels (plain `errors.New(...)`, no non-stdlib imports); the handler checks `errors.Is` against them and picks the HTTP status itself.
+Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `service.go`, `store.go`, `handler.go`, `business_error.go`, `constant.go`; no separate `config.go`). `store.go` declares the module's own `Store` interface and its Postgres-backed implementation together, constructed via `NewPostgresStore(pool)` and wired in from `server/server.go` — copy this shape for any module needing persistence. `service.go` declares the module's `Service` interface (what it *provides* to other modules, as opposed to `Store`, which is what it *requires*) alongside `*dependencies`' implementation of it. `business_error.go` holds the module's own domain sentinels (plain `errors.New(...)`, no non-stdlib imports); the handler checks `errors.Is` against them and picks the HTTP status itself.
+
+Full required/optional file table: `modules/README.md`.
+
+## Cross-module communication
+
+Modules call each other in-process through an interface — never by importing and holding a sibling module's concrete `*dependencies` type directly. `modules/foo/` calling `modules/example/` via `example.Service` is the worked example; see `modules/README.md` for the full pattern (why `Service` is owned by the provider, not hand-rolled per-consumer, and only added once a real second module needs to call in).
 
 ## Mocks
 
