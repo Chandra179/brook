@@ -8,17 +8,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Store interface {
+type store interface {
 	CreateExample(ctx context.Context, name string) (*Example, error)
 }
 
-var _ Store = (*postgresStore)(nil)
+var _ store = (*postgresStore)(nil)
 
 type postgresStore struct {
 	pool *pgxpool.Pool
 }
 
-func NewPostgresStore(pool *pgxpool.Pool) *postgresStore {
+func newPostgresStore(pool *pgxpool.Pool) *postgresStore {
 	return &postgresStore{pool: pool}
 }
 

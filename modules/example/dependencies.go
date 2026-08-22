@@ -1,19 +1,20 @@
 package example
 
 import (
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
 type dependencies struct {
 	logger *zap.Logger
-	store  Store
+	store  store
 }
 
 type DependenciesConfig struct {
 	Logger *zap.Logger
-	Store  Store
+	Pool   *pgxpool.Pool
 }
 
 func NewDependencies(deps *DependenciesConfig) *dependencies {
-	return &dependencies{logger: deps.Logger, store: deps.Store}
+	return &dependencies{logger: deps.Logger, store: newPostgresStore(deps.Pool)}
 }

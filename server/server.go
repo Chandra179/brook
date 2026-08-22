@@ -100,7 +100,7 @@ func RunHttpServer() {
 	mdlw := middleware.NewDependencies(logger, registry)
 	exampleDeps := example.NewDependencies(&example.DependenciesConfig{
 		Logger: logger,
-		Store:  example.NewPostgresStore(pool),
+		Pool:   pool,
 	})
 	fooDeps := foo.NewDependencies(&foo.DependenciesConfig{
 		Logger:  logger,

@@ -6,14 +6,14 @@ Each module is a Go package under `modules/<name>/`. Module owns its domain logi
 
 | File | Purpose |
 |------|---------|
-| `dependencies.go` | Unexported `dependencies` struct holding the module's wired deps (e.g. `logger`, `store`); exported `DependenciesConfig` struct callers fill in; `NewDependencies(*DependenciesConfig) *dependencies` constructor. Handlers are methods on `*dependencies`. |
+| `dependencies.go` | Unexported `dependencies` struct holding the module's wired deps (e.g. `logger`, `store`); exported `DependenciesConfig` struct callers fill in; `NewDependencies(*DependenciesConfig) *dependencies` constructor. For a module with persistence, `DependenciesConfig` takes the shared `*pgxpool.Pool` and `NewDependencies` constructs the module's Postgres-backed `store` itself (see `modules/example/dependencies.go`) — callers never build the store directly, and the `store` interface stays unexported since nothing outside the package needs to name it. Handlers are methods on `*dependencies`. |
 | `types.go` | Domain types, structs, constants |
 
 ## Optional files
 
 | File | Purpose |
 |------|---------|
-| `store.go` | `Store` interface + its Postgres-backed implementation (only if the module needs persistence) |
+| `store.go` | Unexported `store` interface + its Postgres-backed implementation (only if the module needs persistence); constructed internally by `NewDependencies` from the injected `*pgxpool.Pool` |
 | `service.go` | `Service` interface + its implementation on `*dependencies` (only if another module calls into this one) |
 | `handler.go` | Module entrypoint — HTTP handlers |
 | `business_error.go` | Domain sentinels (plain `errors.New(...)`, no non-stdlib imports) |
