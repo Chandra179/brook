@@ -1,63 +1,92 @@
 # Brook — Agent Guide
 
-Go modular monolith skeleton. Module `brook`, Go 1.26.3.
+Go modular monolith skeleton. Module `brook`, Go `1.26.5`. One binary, domain modules as Go packages.
 
-## Quick commands
+## Commands
 
 ```bash
-make run                      # go run ./cmd/example/
-make ci                       # full CI pipeline (build, vet, vendor, swagger, docker)
-make vendor                   # go mod tidy && go mod vendor
-make swag                     # regenerate swagger docs (requires swag CLI)
+make run              # go run ./cmd/example/
+make test             # go test -short -race -count=1 ./...
+make lint             # golangci-lint run  (v2 config in .golangci.yml)
+make vendor           # go mod tidy && go mod vendor
+make swag             # swag init -g cmd/example/main.go -o docs
+make mocks            # go tool mockery
+make up / down        # docker compose up/down
+make modernize        # go fix ./...
+make align            # fieldalignment -fix ./...
+make re               # scripts/rename-module.sh example
+make ci               # act workflow_dispatch  (runs GitHub Actions locally via act)
+make migrate-up       # goose -dir store/migrations postgres "$POSTGRES_DSN" up
+make migrate-down     # goose -dir store/migrations postgres "$POSTGRES_DSN" down
+make migrate-create name=<name>  # goose -dir store/migrations create <name> sql
 ```
 
-CI via `make ci` (local) or `act push` / `act pull_request` (GitHub Actions locally). See `.github/workflows/ci.yml`.
+Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test → build → docker build).
 
 ## Architecture
 
-- **Framework**: Gin (`github.com/gin-gonic/gin`). Handlers are `gin.HandlerFunc`.
-- **Logger**: `go.uber.org/zap` used directly (no wrapper). See `LoggerConfig.New()` in `config/config.go`.
-- **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`) but no gRPC server is wired in the current entrypoint.
-- **Vendor excluded from `.gitignore`** — `make vendor` runs `go mod vendor` but result is not committed.
-- No global state. Dependencies injected via struct fields.
+- **Framework**: Gin. Handlers are `gin.HandlerFunc` methods on a module's unexported `*dependencies` struct.
+- **Logger**: `go.uber.org/zap` used directly (no wrapper). Built via `logger.NewLogger(appEnvironment)` in `logger/logger.go` — Development for `dev`, else Production. **Not** handled in `config/`.
+- **gRPC** dependency present (for `middleware.RequestIDUnaryInterceptor`), but no gRPC server is wired in the entrypoint.
+- **No global state**; deps injected via constructor.
+- **Persistence**: `pgx`/`pgxpool`. `store/postgres.go` exports only `NewPool(ctx, config.PostgresConfig)` — shared infra, no domain knowledge. Each module owns its own `Store` interface + Postgres implementation together in its own `store.go` (see `modules/example/store.go`). Migrations are goose SQL files in `store/migrations/`, applied explicitly via `make migrate-up` (never at server startup). `goose` is intentionally **not** a go.mod dependency — installed on demand via `go install`, same as `golangci-lint`/`swag`.
+- **Tracing**: OpenTelemetry SDK (`tracing/tracing.go`'s `NewProvider`), gated by `tracing.enabled`, exporting via OTLP/gRPC. Same address-only rule as Pyroscope — only `tracing.otlp_endpoint` is known here, the collector (Grafana Alloy → Tempo) is owned externally. `otelgin.Middleware` always runs (no-op when disabled); `middleware.RequestID` reuses its span's trace ID as the request ID when no `X-Request-ID` header is present.
+- **Metrics**: `github.com/prometheus/client_golang` at `/metrics` (exposition format, scraped by Alloy — no Prometheus server here). Metric vectors live on a `*prometheus.Registry` built once in `server/server.go` and injected into `middleware.NewDependencies` — no global registry.
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| `cmd/example/main.go` | Entrypoint, calls `server.RunHttpServer()` |
-| `modules/server/http_server.go` | Assembles Gin router, registers middleware and routes, starts `http.Server` |
-| `modules/<name>/` | Flat domain module. `config.go` + `dependencies.go` + handler files |
+| `cmd/example/main.go` | Entrypoint → `server.RunHttpServer()` |
+| `server/server.go` | Assembles Gin router, registers middleware/routes, graceful shutdown |
+| `modules/<name>/` | Flat domain module package |
 | `middleware/` | Gin middleware + gRPC interceptor. See `middleware/README.md` |
-| `config/` | Shared config loader (`config.Load("config/config.yaml")`) |
+| `config/` | Shared YAML loader + `config_prd.yaml` / `config_dev.yaml` |
+| `logger/` | zap logger constructor |
+| `tracing/` | OTel `TracerProvider` constructor (OTLP/gRPC exporter) |
+| `docs/` | Generated swagger output (do not hand-edit) |
+| `store/` | Shared pgx pool constructor + goose migrations (`store/migrations/`) |
 
-## Middleware order (in `http_server.go`)
+## Config & env
 
-```
-gin.CustomRecovery → RequestID → RequestLog → Timeout → handler
-```
-
-All in `middleware/` package. Request ID stored in `context.Context` — shared between HTTP and gRPC. Retrieve via `middleware.GetRequestID(ctx)`.
+- `APP_ENVIRONMENT` selects the config file: `dev` → `config/config_dev.yaml`, anything else (incl. unset) → `config/config_prd.yaml`. Load with `config.Load(path)` (`config/config.go`).
+- Shared config is **flat** (`http`, `logger`, `middleware`, `profiling`) — not nested per-module. Modules receive only what they need via constructor args.
+- `profiling` (Pyroscope push SDK) is gated by `enabled`. This repo only knows Pyroscope's address, not how/where it runs — the collector is owned and operated elsewhere. Reached via `http://host.docker.internal:4040` from the root `docker-compose.yml`'s `brook` service (needs `extra_hosts: host-gateway`, since the collector isn't in this compose file's network), or `http://localhost:4040` for plain `make run`. Don't add a Pyroscope/Grafana service to this repo.
+- `tracing` (OTel SDK) is gated by `enabled`, same address-only rule: only `otlp_endpoint` is known, Alloy is owned externally. `OTEL_EXPORTER_OTLP_ENDPOINT` env var overrides `tracing.otlp_endpoint` if set.
+- `POSTGRES_DSN` env var overrides `postgres.dsn` from the YAML if set (same override pattern as `PYROSCOPE_SERVER_ADDRESS`).
 
 ## Module pattern (`modules/<name>/`)
 
-Flat Go package. Defines own `Config` struct (independent of shared `config/`). Handlers are methods on the module's `Dependencies` struct, registered via `mod.Handle` in the server assembly. Dependencies injected via constructor — `NewDependencies(logger, cfg)`. Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
+Flat package, no `internal/` sub-packages. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
 
-**Important**: the module's `Config` contains only domain-specific config. Logger is **not** part of module config — it's injected directly via constructor. See `modules/example/` as the reference.
+Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `service.go`, `store.go`, `handler.go`, `business_error.go`, `constant.go`; no separate `config.go`). `store.go` declares the module's own `Store` interface and its Postgres-backed implementation together, constructed via `NewPostgresStore(pool)` and wired in from `server/server.go` — copy this shape for any module needing persistence. `service.go` declares the module's `Service` interface (what it *provides* to other modules, as opposed to `Store`, which is what it *requires*) alongside `*dependencies`' implementation of it. `business_error.go` holds the module's own domain sentinels (plain `errors.New(...)`, no non-stdlib imports); the handler checks `errors.Is` against them and picks the HTTP status itself.
 
-## Config
+Full required/optional file table: `modules/README.md`.
 
-Shared `config/config.yaml` loaded by `config.Load("config/config.yaml")`. Each module's config section nested under module key in the YAML. Module also defines its own `Config` struct — zero coupling between module configs.
+## Cross-module communication
 
-See `example` section in `config/config.yaml` + `modules/example/config.go` for the pattern. Module configs are independent — zero coupling between them.
+Modules call each other in-process through an interface — never by importing and holding a sibling module's concrete `*dependencies` type directly. `modules/foo/` calling `modules/example/` via `example.Service` is the worked example; see `modules/README.md` for the full pattern (why `Service` is owned by the provider, not hand-rolled per-consumer, and only added once a real second module needs to call in).
+
+## Mocks
+
+`.mockery.yaml` has one `packages.brook` entry (module root) with `recursive: true` + `all: true` — it walks the whole module and mocks every interface it finds, so new packages don't need a config entry. Since the generated mock imports the module package it mocks, tests using it must live in `package <mod>_test` (external test package) to avoid an import cycle — see `modules/example/service_test.go`.
+
+## Middleware order (in `server/server.go`)
+
+```
+gin.CustomRecovery → otelgin.Middleware → RequestID → RequestLog → Metrics → handler
+```
+
+All in `middleware/` (except `otelgin.Middleware`, from `go.opentelemetry.io/contrib`). Request ID stored in `context.Context` (shared HTTP/gRPC); retrieve via `middleware.GetRequestID(ctx)`.
 
 ## Creating a new module
 
-Copy `modules/example/`, rename package, add route in `modules/server/http_server.go`, add config section in `config/config.yaml`.
+Copy `modules/example/`, rename the package, wire deps in `dependencies.go`, and register its handlers in `server/server.go`. No config section needed (shared config is flat).
 
 ## Renaming project
 
 ```bash
 scripts/rename-module.sh <new-module-name>
 ```
-Updates `go.mod` and all import paths. Run `go build ./...` to verify.
+
+Updates `go.mod`, all import paths, and `.golangci.yml` `local-prefixes`. Verify with `go build ./...`.

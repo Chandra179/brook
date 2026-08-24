@@ -1,0 +1,32 @@
+http:
+  port: "8080"
+  read_timeout_in_second: 5
+  write_timeout_in_second: 120
+  idle_timeout_in_second: 120
+  shutdown_timeout_in_second: 30
+
+logger:
+  level: prd
+
+middleware:
+  request_log:
+    skip_paths: ["/health", "/metrics"]
+    log_query: true
+  real_ip:
+    trusted_proxies: []
+
+profiling:
+  enabled: false
+  server_address: "http://pyroscope:4040"
+  application_name: "brook"
+
+tracing:
+  enabled: false
+  otlp_endpoint: "alloy:4317"
+  application_name: "brook"
+
+postgres:
+  # DSN is expected via the POSTGRES_DSN env var at deploy time; this is a placeholder only.
+  dsn: ""
+  max_conns: 25
+  min_conns: 5

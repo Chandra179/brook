@@ -3,27 +3,29 @@ package config
 import (
 	"os"
 
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
 	Logger     LoggerConfig     `yaml:"logger"`
+	Profiling  ProfilingConfig  `yaml:"profiling"`
+	Tracing    TracingConfig    `yaml:"tracing"`
+	Postgres   PostgresConfig   `yaml:"postgres"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 	HTTP       HTTPConfig       `yaml:"http"`
 }
 
 type HTTPConfig struct {
-	Port              string `yaml:"port"`
-	ReadTimeoutInSec  int    `yaml:"read_timeout_in_second"`
-	WriteTimeoutInSec int    `yaml:"write_timeout_in_second"`
-	IdleTimeoutInSec  int    `yaml:"idle_timeout_in_second"`
+	Port                 string `yaml:"port"`
+	ReadTimeoutInSec     int    `yaml:"read_timeout_in_second"`
+	WriteTimeoutInSec    int    `yaml:"write_timeout_in_second"`
+	IdleTimeoutInSec     int    `yaml:"idle_timeout_in_second"`
+	ShutdownTimeoutInSec int    `yaml:"shutdown_timeout_in_second"`
 }
 
 type MiddlewareConfig struct {
-	RealIP       RealIPConfig     `yaml:"real_ip"`
-	RequestLog   RequestLogConfig `yaml:"request_log"`
-	TimeoutInSec int              `yaml:"timeout_in_second"`
+	RealIP     RealIPConfig     `yaml:"real_ip"`
+	RequestLog RequestLogConfig `yaml:"request_log"`
 }
 
 type RequestLogConfig struct {
@@ -39,13 +41,22 @@ type LoggerConfig struct {
 	Level string `yaml:"level"`
 }
 
-func (l LoggerConfig) New() *zap.Logger {
-	if l.Level == "dev" {
-		logger, _ := zap.NewDevelopment()
-		return logger
-	}
-	logger, _ := zap.NewProduction()
-	return logger
+type ProfilingConfig struct {
+	ServerAddress   string `yaml:"server_address"`
+	ApplicationName string `yaml:"application_name"`
+	Enabled         bool   `yaml:"enabled"`
+}
+
+type TracingConfig struct {
+	OTLPEndpoint    string `yaml:"otlp_endpoint"`
+	ApplicationName string `yaml:"application_name"`
+	Enabled         bool   `yaml:"enabled"`
+}
+
+type PostgresConfig struct {
+	DSN      string `yaml:"dsn"`
+	MaxConns int32  `yaml:"max_conns"`
+	MinConns int32  `yaml:"min_conns"`
 }
 
 func Load(path string) (*Config, error) {
@@ -59,5 +70,18 @@ func Load(path string) (*Config, error) {
 	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
 		return nil, err
 	}
+
+	if addr := os.Getenv("PYROSCOPE_SERVER_ADDRESS"); addr != "" {
+		cfg.Profiling.ServerAddress = addr
+	}
+
+	if addr := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); addr != "" {
+		cfg.Tracing.OTLPEndpoint = addr
+	}
+
+	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
+		cfg.Postgres.DSN = dsn
+	}
+
 	return &cfg, nil
 }

@@ -1,0 +1,31 @@
+http:
+  port: "8080"
+  read_timeout_in_second: 5
+  write_timeout_in_second: 120
+  idle_timeout_in_second: 120
+  shutdown_timeout_in_second: 5
+
+logger:
+  level: dev
+
+middleware:
+  request_log:
+    skip_paths: ["/health", "/metrics"]
+    log_query: true
+  real_ip:
+    trusted_proxies: []
+
+profiling:
+  enabled: true
+  server_address: "http://localhost:4040"
+  application_name: "brook.dev"
+
+tracing:
+  enabled: true
+  otlp_endpoint: "localhost:4317"
+  application_name: "brook.dev"
+
+postgres:
+  dsn: "postgres://brook:brook@localhost:5432/brook?sslmode=disable"
+  max_conns: 10
+  min_conns: 2
