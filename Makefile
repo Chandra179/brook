@@ -29,10 +29,10 @@ up:
 down:
 	docker compose down
 
-re:
+rename:
 	scripts/rename-module.sh example
 
-modernize:
+fix:
 	go fix ./...
 
 align:
