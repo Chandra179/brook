@@ -15,18 +15,15 @@ middleware:
   real_ip:
     trusted_proxies: []
 
-profiling:
-  enabled: false
-  server_address: "http://pyroscope:4040"
-  application_name: "brook"
-
-tracing:
-  enabled: false
-  otlp_endpoint: "alloy:4317"
-  application_name: "brook"
-
 postgres:
   # DSN is expected via the POSTGRES_DSN env var at deploy time; this is a placeholder only.
   dsn: ""
   max_conns: 25
   min_conns: 5
+
+arangodb:
+  # Connection params are expected via env vars at deploy time; placeholders only.
+  endpoints: ["http://arangodb:8529"]
+  username: "root"
+  password: ""
+  database: "brook"

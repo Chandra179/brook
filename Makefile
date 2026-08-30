@@ -21,7 +21,9 @@ ci:
 		--reuse
 
 run:
-	go run ./cmd/example/
+	@fuser -k 8080/tcp >/dev/null 2>&1 || true
+	docker compose up -d postgres arangodb
+	APP_ENVIRONMENT=dev go run ./cmd/example/
 
 up:
 	docker compose up -d

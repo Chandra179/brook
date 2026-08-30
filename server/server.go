@@ -8,20 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"runtime/debug"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/grafana/pyroscope-go"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
 	"brook/config"
@@ -31,12 +24,12 @@ import (
 	"brook/modules/example"
 	"brook/modules/foo"
 	"brook/store"
-	"brook/tracing"
 )
 
 func RunHttpServer() {
 	appEnvironment := os.Getenv("APP_ENVIRONMENT")
 
+	// ---- Config ----
 	configPath := "config/config_prd.yaml"
 	if appEnvironment == "dev" {
 		configPath = "config/config_dev.yaml"
@@ -47,57 +40,24 @@ func RunHttpServer() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	if cfg.Profiling.Enabled {
-		runtime.SetMutexProfileFraction(5)
-		runtime.SetBlockProfileRate(5)
-
-		profiler, pErr := pyroscope.Start(pyroscope.Config{
-			ApplicationName: cfg.Profiling.ApplicationName,
-			ServerAddress:   cfg.Profiling.ServerAddress,
-			Logger:          pyroscope.StandardLogger,
-			ProfileTypes: []pyroscope.ProfileType{
-				pyroscope.ProfileCPU,
-				pyroscope.ProfileAllocObjects,
-				pyroscope.ProfileAllocSpace,
-				pyroscope.ProfileInuseObjects,
-				pyroscope.ProfileInuseSpace,
-				pyroscope.ProfileGoroutines,
-				pyroscope.ProfileMutexCount,
-				pyroscope.ProfileMutexDuration,
-				pyroscope.ProfileBlockCount,
-				pyroscope.ProfileBlockDuration,
-			},
-		})
-		if pErr != nil {
-			log.Fatalf("start pyroscope: %v", pErr)
-		}
-		defer func() { _ = profiler.Stop() }()
-	}
-
 	logger, err := logger.NewLogger(appEnvironment)
 	if err != nil {
 		log.Fatalf("new logger: %v", err)
 	}
 
-	if cfg.Tracing.Enabled {
-		tp, tErr := tracing.NewProvider(context.Background(), cfg.Tracing)
-		if tErr != nil {
-			log.Fatalf("start tracing: %v", tErr)
-		}
-		otel.SetTracerProvider(tp)
-		defer func() { _ = tp.Shutdown(context.Background()) }()
-	}
-
+	// ---- Datastores (Postgres + ArangoDB) ----
 	pool, err := store.NewPool(context.Background(), cfg.Postgres)
 	if err != nil {
 		log.Fatalf("connect postgres: %v", err)
 	}
 	defer pool.Close()
 
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	if _, err := store.NewArangoClient(context.Background(), cfg.ArangoDB); err != nil {
+		log.Fatalf("connect arangodb: %v", err)
+	}
 
-	mdlw := middleware.NewDependencies(logger, registry)
+	// ---- Middleware / modules ----
+	mdlw := middleware.NewDependencies(logger)
 	exampleDeps := example.NewDependencies(&example.DependenciesConfig{
 		Logger: logger,
 		Pool:   pool,
@@ -113,6 +73,7 @@ func RunHttpServer() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// ---- Router ----
 	r := gin.New()
 	_ = r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
 
@@ -124,20 +85,18 @@ func RunHttpServer() {
 			)
 			c.AbortWithStatus(http.StatusInternalServerError)
 		}),
-		otelgin.Middleware(cfg.Tracing.ApplicationName),
 		middleware.RequestID,
 		mdlw.RequestLog(cfg.Middleware.RequestLog),
-		mdlw.Metrics(),
 	)
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-	r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.POST("/example", exampleDeps.HandleExample)
 	r.POST("/foo", fooDeps.HandleFoo)
 
+	// ---- HTTP server + graceful shutdown ----
 	addr := fmt.Sprintf(":%s", cfg.HTTP.Port)
 	srv := &http.Server{
 		Addr:         addr,

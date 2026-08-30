@@ -8,9 +8,8 @@ import (
 
 type Config struct {
 	Logger     LoggerConfig     `yaml:"logger"`
-	Profiling  ProfilingConfig  `yaml:"profiling"`
-	Tracing    TracingConfig    `yaml:"tracing"`
 	Postgres   PostgresConfig   `yaml:"postgres"`
+	ArangoDB   ArangoDBConfig   `yaml:"arangodb"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 	HTTP       HTTPConfig       `yaml:"http"`
 }
@@ -41,22 +40,17 @@ type LoggerConfig struct {
 	Level string `yaml:"level"`
 }
 
-type ProfilingConfig struct {
-	ServerAddress   string `yaml:"server_address"`
-	ApplicationName string `yaml:"application_name"`
-	Enabled         bool   `yaml:"enabled"`
-}
-
-type TracingConfig struct {
-	OTLPEndpoint    string `yaml:"otlp_endpoint"`
-	ApplicationName string `yaml:"application_name"`
-	Enabled         bool   `yaml:"enabled"`
-}
-
 type PostgresConfig struct {
 	DSN      string `yaml:"dsn"`
 	MaxConns int32  `yaml:"max_conns"`
 	MinConns int32  `yaml:"min_conns"`
+}
+
+type ArangoDBConfig struct {
+	Endpoints []string `yaml:"endpoints"`
+	Username  string   `yaml:"username"`
+	Password  string   `yaml:"password"`
+	Database  string   `yaml:"database"`
 }
 
 func Load(path string) (*Config, error) {
@@ -71,16 +65,18 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if addr := os.Getenv("PYROSCOPE_SERVER_ADDRESS"); addr != "" {
-		cfg.Profiling.ServerAddress = addr
-	}
-
-	if addr := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); addr != "" {
-		cfg.Tracing.OTLPEndpoint = addr
-	}
-
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
 		cfg.Postgres.DSN = dsn
+	}
+
+	if db := os.Getenv("ARANGODB_DATABASE"); db != "" {
+		cfg.ArangoDB.Database = db
+	}
+	if user := os.Getenv("ARANGODB_USERNAME"); user != "" {
+		cfg.ArangoDB.Username = user
+	}
+	if pass := os.Getenv("ARANGODB_PASSWORD"); pass != "" {
+		cfg.ArangoDB.Password = pass
 	}
 
 	return &cfg, nil

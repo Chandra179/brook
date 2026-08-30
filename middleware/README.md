@@ -3,19 +3,16 @@
 Gin middleware used by the HTTP server. Registered in order via `r.Use(...)`:
 
 ```
-gin.CustomRecovery → otelgin.Middleware → RequestID → RequestLog → Metrics → handler
+gin.CustomRecovery → RequestID → RequestLog → handler
 ```
-
-`otelgin.Middleware` (from `go.opentelemetry.io/contrib/.../gin/otelgin`) starts a span for every request so `RequestID` and `RequestLog` can read it from context; it's always registered, but is a no-op when tracing is disabled (`config.TracingConfig.Enabled`), since the global `TracerProvider` stays the OTel no-op default.
 
 ## Files
 
 | File | Kind | Description |
 |------|------|-------------|
-| `dependencies.go` | infra | Holds `*zap.Logger` and a `*prometheus.Registry` (+ the metric vectors registered on it) for stateful middleware |
-| `request_id.go` | middleware | Reads/reuses `X-Request-ID` header. If absent, reuses the OTel trace ID from the span already in context (set by `otelgin`, which runs first), falling back to a random ID if no span exists. Stores the ID in context, echoes it in the response. Also exports `RequestIDUnaryInterceptor` for gRPC and `GetRequestID(ctx)` for handlers. |
-| `request_log.go` | middleware | Logs one canonical line per request: method, path, status, duration, request ID, trace ID (when a span exists), query params. Level tracks response status (Info for 2xx/3xx, Warn for 4xx, Error for 5xx); the last error attached via `c.Error(err)` is included for 4xx/5xx. Skips configured paths. Neither request nor response bodies are logged (see comment in file). Full rationale and log-level/stacktrace behavior: [`docs/logging.md`](../docs/logging.md). |
-| `metrics.go` | middleware | Records an `http_request_duration_seconds` histogram and `http_requests_total` counter, labeled by method, route (`c.FullPath()`), and status. Registered on the `*prometheus.Registry` passed into `NewDependencies`, exposed by `server/server.go` at `/metrics` for Grafana Alloy to scrape — no Prometheus server involved. |
+| `dependencies.go` | infra | Holds the `*zap.Logger` used by stateful middleware |
+| `request_id.go` | middleware | Reads/reuses `X-Request-ID` header, generating a random ID if absent. Stores the ID in context, echoes it in the response. Also exports `RequestIDUnaryInterceptor` for gRPC and `GetRequestID(ctx)` for handlers. |
+| `request_log.go` | middleware | Logs one canonical line per request: method, path, status, duration, request ID, query params. Level tracks response status (Info for 2xx/3xx, Warn for 4xx, Error for 5xx); the last error attached via `c.Error(err)` is included for 4xx/5xx. Skips configured paths. Neither request nor response bodies are logged (see comment in file). Full rationale and log-level/stacktrace behavior: [`docs/logging.md`](../docs/logging.md). |
 
 ## Why no body logging?
 

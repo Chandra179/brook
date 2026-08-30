@@ -3,15 +3,9 @@ services:
     build: .
     environment:
       APP_ENVIRONMENT: dev
-      # Pyroscope is run externally; this reaches whatever's published on the host at :4040.
-      PYROSCOPE_SERVER_ADDRESS: http://host.docker.internal:4040
-      # Grafana Alloy (OTLP receiver) is also run externally; reaches whatever's published on the host at :4317.
-      OTEL_EXPORTER_OTLP_ENDPOINT: host.docker.internal:4317
       POSTGRES_DSN: postgres://brook:brook@postgres:5432/brook?sslmode=disable
     ports:
       - "8080:8080"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
 
@@ -26,5 +20,15 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  arangodb:
+    image: arangodb:3.12
+    environment:
+      ARANGO_ROOT_PASSWORD: brook
+    ports:
+      - "8530:8529"
+    volumes:
+      - arangodb-data:/var/lib/arangodb3
+
 volumes:
   postgres-data:
+  arangodb-data:

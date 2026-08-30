@@ -66,16 +66,19 @@ fi
 # 8. Update Docker/Postgres project naming: service name, user/password/db,
 #    and DSNs across docker-compose.yml, .env.example, and CI.
 for f in docker-compose.yml .env.example .github/workflows/ci.yml; do
-	[ -f "$f" ] || continue
-	sed -i \
-		-e "s|^  $old_name:$|  $new_name:|" \
-		-e "s|postgres://$old_name:$old_name@|postgres://$new_name:$new_name@|g" \
-		-e "s|/$old_name?sslmode|/$new_name?sslmode|g" \
-		-e "s|POSTGRES_USER: $old_name|POSTGRES_USER: $new_name|" \
-		-e "s|POSTGRES_PASSWORD: $old_name|POSTGRES_PASSWORD: $new_name|" \
-		-e "s|POSTGRES_DB: $old_name|POSTGRES_DB: $new_name|" \
-		"$f"
-done
+		[ -f "$f" ] || continue
+		sed -i \
+			-e "s|^  $old_name:$|  $new_name:|" \
+			-e "s|postgres://$old_name:$old_name@|postgres://$new_name:$new_name@|g" \
+			-e "s|/$old_name?sslmode|/$new_name?sslmode|g" \
+			-e "s|POSTGRES_USER: $old_name|POSTGRES_USER: $new_name|" \
+			-e "s|POSTGRES_PASSWORD: $old_name|POSTGRES_PASSWORD: $new_name|" \
+			-e "s|POSTGRES_DB: $old_name|POSTGRES_DB: $new_name|" \
+			-e "s|ARANGO_ROOT_PASSWORD: $old_name|ARANGO_ROOT_PASSWORD: $new_name|" \
+			-e "s|ARANGODB_PASSWORD=$old_name|ARANGODB_PASSWORD=$new_name|" \
+			-e "s|ARANGODB_DATABASE=$old_name|ARANGODB_DATABASE=$new_name|" \
+			"$f"
+	done
 echo "  updated docker-compose.yml, .env.example, .github/workflows/ci.yml"
 
 # 8. Update application_name and DSN placeholders in config/*.yaml
@@ -86,6 +89,7 @@ for f in config/config_dev.yaml config/config_prd.yaml; do
 		-e "s|application_name: \"$old_name\"|application_name: \"$new_name\"|" \
 		-e "s|postgres://$old_name:$old_name@|postgres://$new_name:$new_name@|g" \
 		-e "s|/$old_name?sslmode|/$new_name?sslmode|g" \
+		-e "s|database: \"$old_name\"|database: \"$new_name\"|" \
 		"$f"
 done
 echo "  updated config/config_dev.yaml, config/config_prd.yaml"
