@@ -18,6 +18,13 @@ func NewPool(ctx context.Context, cfg config.PostgresConfig) (*pgxpool.Pool, err
 		return nil, fmt.Errorf("parse postgres dsn: %w", err)
 	}
 
+	if cfg.Username != "" {
+		poolCfg.ConnConfig.User = cfg.Username
+	}
+	if cfg.Password != "" {
+		poolCfg.ConnConfig.Password = cfg.Password
+	}
+
 	poolCfg.MaxConns = cfg.MaxConns
 	poolCfg.MinConns = cfg.MinConns
 

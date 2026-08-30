@@ -16,12 +16,9 @@ middleware:
     trusted_proxies: []
 
 postgres:
-  dsn: "postgres://brook:brook@localhost:5432/brook?sslmode=disable"
+  dsn: "postgres://localhost:5434/brook?sslmode=disable"
   max_conns: 10
   min_conns: 2
 
 arangodb:
   endpoints: ["http://localhost:8530"]
-  username: "root"
-  password: "brook"
-  database: "brook"

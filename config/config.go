@@ -42,6 +42,8 @@ type LoggerConfig struct {
 
 type PostgresConfig struct {
 	DSN      string `yaml:"dsn"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 	MaxConns int32  `yaml:"max_conns"`
 	MinConns int32  `yaml:"min_conns"`
 }
@@ -68,16 +70,12 @@ func Load(path string) (*Config, error) {
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
 		cfg.Postgres.DSN = dsn
 	}
+	cfg.Postgres.Username = os.Getenv("POSTGRES_USERNAME")
+	cfg.Postgres.Password = os.Getenv("POSTGRES_PASSWORD")
 
-	if db := os.Getenv("ARANGODB_DATABASE"); db != "" {
-		cfg.ArangoDB.Database = db
-	}
-	if user := os.Getenv("ARANGODB_USERNAME"); user != "" {
-		cfg.ArangoDB.Username = user
-	}
-	if pass := os.Getenv("ARANGODB_PASSWORD"); pass != "" {
-		cfg.ArangoDB.Password = pass
-	}
+	cfg.ArangoDB.Database = os.Getenv("ARANGODB_DATABASE")
+	cfg.ArangoDB.Username = os.Getenv("ARANGODB_USERNAME")
+	cfg.ArangoDB.Password = os.Getenv("ARANGODB_PASSWORD")
 
 	return &cfg, nil
 }

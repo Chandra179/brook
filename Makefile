@@ -1,5 +1,9 @@
 .PHONY: vendor swag mocks test lint ci run up down re fieldalignment modernize migrate-up migrate-down migrate-create
 
+# Load env vars from .env and export them to all recipe shells
+-include .env
+export
+
 vendor:
 	go mod tidy && go mod vendor
 
@@ -23,7 +27,7 @@ ci:
 run:
 	@fuser -k 8080/tcp >/dev/null 2>&1 || true
 	docker compose up -d postgres arangodb
-	APP_ENVIRONMENT=dev go run ./cmd/example/
+	go run ./cmd/example/
 
 up:
 	docker compose up -d
