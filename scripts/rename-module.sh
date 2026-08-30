@@ -57,7 +57,13 @@ echo "  updated .mockery.yaml"
 sed -i "s|@title           $old_title API|@title           $new_title API|" cmd/example/main.go
 echo "  updated swagger @title in cmd/example/main.go (run 'make swag' to regenerate docs/)"
 
-# 7. Update Docker/Postgres project naming: service name, user/password/db,
+# 7. Rename the entrypoint directory cmd/example -> cmd/<new_name>.
+if [ -d "cmd/example" ]; then
+	mv cmd/example "cmd/$new_name"
+	echo "  renamed cmd/example -> cmd/$new_name"
+fi
+
+# 8. Update Docker/Postgres project naming: service name, user/password/db,
 #    and DSNs across docker-compose.yml, .env.example, and CI.
 for f in docker-compose.yml .env.example .github/workflows/ci.yml; do
 	[ -f "$f" ] || continue
@@ -83,6 +89,13 @@ for f in config/config_dev.yaml config/config_prd.yaml; do
 		"$f"
 done
 echo "  updated config/config_dev.yaml, config/config_prd.yaml"
+
+# 9. Update Makefile references to the entrypoint directory.
+sed -i \
+	-e "s|cmd/example/main.go|cmd/$new_name/main.go|g" \
+	-e "s|./cmd/example/|./cmd/$new_name/|g" \
+	Makefile
+echo "  updated Makefile entrypoint references"
 
 echo "Done. Run 'go build ./...' to verify, 'make swag' to regenerate docs/,"
 echo "and review README.md/CLAUDE.md/AGENTS.md, which describe 'brook' in prose"
