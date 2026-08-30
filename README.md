@@ -11,17 +11,15 @@ modules/                # domain modules
   example/              #   reference module
     dependencies.go     #     wire deps, construct services/store
     types.go             #    domain types
-    interface.go         #    Store interface
     service.go            #   business logic
-    store.go               #  Postgres-backed Store implementation
+    store.go               #  Store interface + Postgres-backed implementation
     handler.go              # HTTP handlers
     business_error.go       # domain sentinels/custom errors
     constant.go             # module constants
-middleware/              # shared: recovery, request ID, request logging
+middleware/              # shared: recovery, request ID, request logging, gRPC interceptor
 config/                  # YAML loader + config_dev.yaml / config_prd.yaml
 logger/                  # zap logger constructor
-tracing/                 # OTel TracerProvider constructor (OTLP/gRPC exporter)
-store/                   # shared pgx pool constructor + goose migrations (store/migrations/)
+store/                   # shared postgres pool + ArangoDB client + goose migrations (store/migrations/)
 docs/                    # generated swagger output (do not hand-edit)
 ```
 
@@ -46,19 +44,23 @@ Run `go build ./...` after to verify.
 ## Commands
 
 ```bash
-make run              # go run ./cmd/example/
+make run              # kills :8080, starts postgres+arangodb via docker compose, then APP_ENVIRONMENT=dev go run ./cmd/example/
 make test             # go test -short -race -count=1 ./...
-make lint             # golangci-lint run
+make lint             # golangci-lint run  (v2 config in .golangci.yml)
 make vendor           # go mod tidy && go mod vendor
 make swag             # swag init -g cmd/example/main.go -o docs
 make mocks            # go tool mockery
-make up / down        # docker compose up/down
+make up / down        # docker compose up/down (up starts the brook app container too)
 make modernize        # go fix ./...
 make align            # fieldalignment -fix ./...
+make re               # scripts/rename-module.sh example
+make ci               # act workflow_dispatch (runs GitHub Actions locally via act)
 make migrate-up       # goose -dir store/migrations postgres "$POSTGRES_DSN" up
 make migrate-down     # goose -dir store/migrations postgres "$POSTGRES_DSN" down
 make migrate-create name=<name>  # goose -dir store/migrations create <name> sql
 ```
+
+Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test → build → docker build).
 
 To run a single test: `go test -run TestName ./modules/example/...`.
 
@@ -67,9 +69,12 @@ To run a single test: `go test -run TestName ./modules/example/...`.
 - Framework: Gin. Handlers are `gin.HandlerFunc` methods on a module's unexported `*dependencies` struct.
 - Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
 - No `internal/` sub-packages inside modules.
-- Shared config is flat (`http`, `logger`, `middleware`, `profiling`, `postgres`) — not nested per-module.
+- Shared config is flat (`http`, `logger`, `middleware`, `postgres`, `arangodb`) — not nested per-module.
 - No global state — deps injected via constructor.
-- Persistence: `pgx`/`pgxpool`, wrapped behind a per-module `Store` interface so a future DB swap is contained to one module. `store/` only owns the shared pool constructor and goose migrations — no domain knowledge. This repo only knows Pyroscope's address (continuous profiling), not how/where the collector runs — that's owned externally.
-- Observability: OTel tracing (`tracing/`, OTLP/gRPC export, gated by `tracing.enabled`) and a Prometheus-exposition-format `/metrics` endpoint — both scraped/received by Grafana Alloy, same "address only, collector owned externally" rule as Pyroscope. No Prometheus server, no Alloy config, lives in this repo. `middleware.RequestID` reuses the request's OTel trace ID when no `X-Request-ID` header is supplied, so logs/traces/responses correlate on one ID.
+- Logger: `go.uber.org/zap` used directly (no wrapper). Built via `logger.NewLogger(appEnvironment)` — Development for `dev`, else Production. Not handled in `config/`.
+- Persistence: two stores in `store/` (shared infra, no domain knowledge):
+  - Postgres via `pgx`/`pgxpool` — `store/postgres.go` exports only `NewPool`. Each module owns its own `Store` interface + Postgres implementation together in its own `store.go`. Migrations are goose SQL files in `store/migrations/`, applied explicitly via `make migrate-up` (never at server startup). `goose` is intentionally **not** a go.mod dependency — installed on demand via `go install`, same as `golangci-lint`/`swag`.
+  - ArangoDB via `github.com/arangodb/go-driver/v2` (v2 API — `arangodb` + `connection` packages, HTTP/2, `NewClient(conn)`). `store/arango.go` exports `NewArangoClient`, which pings the server and auto-creates the configured database if missing (no migrations for ArangoDB).
+- No observability stack: metrics (Prometheus), tracing (OTel), and profiling (Pyroscope) have all been removed. Do not re-add `/metrics`, `otelgin`, `tracing/`, or Pyroscope.
 
 See `CLAUDE.md` / `AGENTS.md` for full architectural and workflow details.
