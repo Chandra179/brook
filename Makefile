@@ -30,7 +30,7 @@ down:
 	docker compose down
 
 rename:
-	scripts/rename-module.sh example
+	scripts/rename-module.sh $(name)
 
 fix:
 	go fix ./...
