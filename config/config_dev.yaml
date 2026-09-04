@@ -12,13 +12,9 @@ middleware:
   request_log:
     skip_paths: ["/health", "/metrics"]
     log_query: true
-  real_ip:
-    trusted_proxies: []
 
-postgres:
-  dsn: "postgres://localhost:5434/brook?sslmode=disable"
-  max_conns: 10
-  min_conns: 2
+sqlite:
+  dsn: "brook.db"
 
-arangodb:
-  endpoints: ["http://localhost:8530"]
+badger:
+  dir: "badger"

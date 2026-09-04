@@ -7,20 +7,19 @@ Go modular monolith skeleton. Module `brook`, Go `1.26.5`. One binary, domain mo
 ## Commands
 
 ```bash
-make run              # go run ./cmd/example/
+make run              # go run ./cmd/example/ (embedded DBs, no docker)
 make test             # go test -short -race -count=1 ./...
 make lint             # golangci-lint run  (v2 config in .golangci.yml)
 make vendor           # go mod tidy && go mod vendor
 make swag             # swag init -g cmd/example/main.go -o docs
 make mocks            # go tool mockery
-make up / down        # docker compose up/down
 make modernize        # go fix ./...
 make align            # fieldalignment -fix ./...
 make re               # scripts/rename-module.sh example
 make ci               # act workflow_dispatch  (runs GitHub Actions locally via act)
-make migrate-up       # goose -dir store/migrations postgres "$POSTGRES_DSN" up
-make migrate-down     # goose -dir store/migrations postgres "$POSTGRES_DSN" down
-make migrate-create name=<name>  # goose -dir store/migrations create <name> sql
+make migrate-up       # goose -dir store/migrations/sqlite sqlite3 "$SQLITE_DSN" up
+make migrate-down     # goose -dir store/migrations/sqlite sqlite3 "$SQLITE_DSN" down
+make migrate-create name=<name>  # goose -dir store/migrations/sqlite create <name> sql
 ```
 
 To run a single test: `go test -run TestName ./modules/example/...`.
@@ -36,7 +35,9 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 - **Continuous profiling**: Pyroscope push SDK, gated by `profiling.enabled` in config. This repo only knows Pyroscope's address, not how/where it runs — the collector is owned and operated elsewhere. The root `docker-compose.yml`'s `brook` service reaches it via `http://host.docker.internal:4040` (with `extra_hosts: host-gateway`, since the collector isn't in this compose file's network); plain `make run` reaches it via `http://localhost:4040` (`config/config_dev.yaml`). Don't add a Pyroscope/Grafana service to this repo's compose file or Makefile — that's infra this repo shouldn't own.
 - **Tracing**: OpenTelemetry SDK, gated by `tracing.enabled`, exporting spans via OTLP/gRPC (`tracing/tracing.go`'s `NewProvider`) — same address-only rule as Pyroscope: this repo only knows the OTLP endpoint (`tracing.otlp_endpoint` / `OTEL_EXPORTER_OTLP_ENDPOINT`), the collector (Grafana Alloy, forwarding to Tempo) is owned externally. `otelgin.Middleware` starts a span per request and is always registered (no-op when disabled); `middleware.RequestID` reuses that span's trace ID as the request ID when no `X-Request-ID` header is supplied, so logs/traces/responses share one ID.
 - **Metrics**: `github.com/prometheus/client_golang` exposition format at `/metrics`, scraped by Alloy — no Prometheus server in this repo. Metric vectors live on a `*prometheus.Registry` constructed once in `server/server.go` and injected into `middleware.NewDependencies` (no global registry, no `init()`), registered by `middleware.Metrics()`.
-- **Persistence**: `pgx`/`pgxpool` (not `sqlx`/`lib/pq`). `store/postgres.go` exports only `NewPool(ctx, config.PostgresConfig) (*pgxpool.Pool, error)` — shared infra, like `logger/`, with no knowledge of module domain types. Each module defines the unexported `store` interface it needs and implements it against the pool in its own `store.go` (see `modules/example/store.go`) — unexported since, with persistence now wired internally by `NewDependencies` rather than injected via `DependenciesConfig`, nothing outside the package needs to name the interface — persistence is domain logic per `modules/README.md`, so a future DB swap is contained to one module's store file, not scattered. Migrations are goose SQL files in `store/migrations/`, applied via `make migrate-up` — never auto-run at server startup. `goose` itself is **not** a go.mod dependency (its driver-per-database footprint is large); it's installed on demand via `go install` in the Makefile, same treatment as `golangci-lint`/`swag`/`act`.
+- **Persistence**: two embedded stores in `store/` (shared infra, no domain knowledge), neither needs a server/container:
+  - SQLite via `modernc.org/sqlite` (pure Go, no CGO). `store/sqlite.go` exports only `NewSQLite(ctx, config.SQLiteConfig) (*sql.DB, error)`. Each module defines the unexported `store` interface it needs and implements it against the `*sql.DB` (see `modules/example/` — interface in `interface.go`, impl in `create_example.go`) — unexported since nothing outside the package needs to name it. Migrations are goose SQL files in `store/migrations/sqlite/`, applied via `make migrate-up` — never auto-run at server startup. `goose` itself is **not** a go.mod dependency (its driver-per-database footprint is large); it's installed on demand via `go install` in the Makefile, same treatment as `golangci-lint`/`swag`/`act`.
+  - Badger via `github.com/dgraph-io/badger/v4` (embedded key-value store). `store/badger.go` exports `NewBadger(dir)`, no migrations.
 
 ## Layout
 
@@ -50,21 +51,22 @@ Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test 
 | `logger/` | zap logger constructor |
 | `tracing/` | OTel `TracerProvider` constructor (OTLP/gRPC exporter) |
 | `docs/` | Generated swagger output (do not hand-edit) |
-| `store/` | Shared pgx pool constructor (`postgres.go`) + goose migrations (`migrations/`) |
+| `store/` | Shared SQLite (`sqlite.go`) + Badger (`badger.go`) constructors + goose migrations (`migrations/sqlite/`) |
 
 ## Config & env
 
 - `APP_ENVIRONMENT` selects the config file: `dev` → `config/config_dev.yaml`, anything else (incl. unset) → `config/config_prd.yaml`. Load with `config.Load(path)` (`config/config.go`).
-- Shared config is **flat** (`http`, `logger`, `middleware`, `profiling`) — not nested per-module. Modules receive only what they need via constructor args.
+- Shared config is **flat** (`http`, `logger`, `middleware`, `sqlite`, `badger`) — not nested per-module. Modules receive only what they need via constructor args.
 - `PYROSCOPE_SERVER_ADDRESS` env var overrides `profiling.server_address` from the YAML if set.
 - `OTEL_EXPORTER_OTLP_ENDPOINT` env var overrides `tracing.otlp_endpoint` from the YAML if set (same override pattern as Pyroscope; also the OTel spec's own conventional env var name).
-- `POSTGRES_DSN` env var overrides `postgres.dsn` from the YAML if set — prod leaves the YAML value blank and expects this at deploy time (same pattern as Pyroscope).
+- `SQLITE_DSN` env var overrides `sqlite.dsn` from the YAML if set — prod leaves the YAML value blank and expects this at deploy time.
+- `BADGER_DIR` env var overrides `badger.dir` from the YAML if set.
 
 ## Module pattern (`modules/<name>/`)
 
 Flat package, no `internal/` sub-packages. Wires deps in `dependencies.go` via `NewDependencies(&XConfig{...})` returning an unexported `*dependencies`. Handlers are methods on `*dependencies` registered directly in `server/server.go` (e.g. `exampleDeps.HandleExample` — there is no `mod.Handle` helper). Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers (no separate validation middleware).
 
-Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `service.go`, `store.go`, `handler.go`, `business_error.go`, `constant.go`; no separate `config.go` — no config section needed since shared config is flat). `store.go` declares the module's own unexported `store` interface and its Postgres-backed implementation together; `NewDependencies` takes the shared `*pgxpool.Pool` (from `DependenciesConfig`) and constructs `newPostgresStore(pool)` itself, so `server/server.go` only ever passes the pool, never a `store` — copy this shape for any module that needs persistence. `service.go` declares the module's `Service` interface (what it provides to other modules, as opposed to `store`, which is what it requires) alongside `*dependencies`' implementation of it — see `modules/README.md` for the cross-module communication pattern (`modules/foo/` calling `modules/example/` via `example.Service`). `business_error.go` holds the module's own domain sentinels (plain `errors.New(...)` values, no non-stdlib imports) — the handler checks `errors.Is` against them itself and picks the HTTP status, since HTTP is a transport concern the module has no business knowing about.
+Reference module: `modules/example/` (files: `dependencies.go`, `types.go`, `interface.go`, `create_example.go`, `handler.go`, `business_error.go`, `constant.go`; no separate `config.go` — no config section needed since shared config is flat). `interface.go` declares the module's unexported `store` interface and its exported `Service` interface; `NewDependencies` takes the shared `*sql.DB` (from `DependenciesConfig`) and constructs the SQLite-backed store itself, so `server/server.go` only ever passes the `*sql.DB`, never a `store` — copy this shape for any module that needs persistence. The `Service`/`store` implementations live together in per-action files like `create_example.go`. `business_error.go` holds the module's own domain sentinels (plain `errors.New(...)` values, no non-stdlib imports) — the handler checks `errors.Is` against them itself and picks the HTTP status, since HTTP is a transport concern the module has no business knowing about.
 
 Full required/optional file table and the `store`-vs-`Service` cross-module pattern: `modules/README.md`.
 

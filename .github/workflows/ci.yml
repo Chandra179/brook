@@ -5,22 +5,9 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   ci:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: brook
-          POSTGRES_PASSWORD: brook
-          POSTGRES_DB: brook
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
-      POSTGRES_DSN: postgres://brook:brook@localhost:5432/brook?sslmode=disable
+      SQLITE_DSN: brook.db
+      BADGER_DIR: badger
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +28,7 @@ jobs:
         run: go test -short -race -count=1 ./...
 
       - name: Migrate
-        run: go run github.com/pressly/goose/v3/cmd/goose@latest -dir store/migrations postgres "$POSTGRES_DSN" up
+        run: go run github.com/pressly/goose/v3/cmd/goose@latest -dir store/migrations/sqlite sqlite3 "$SQLITE_DSN" up
 
       - name: Build
         run: go build ./...

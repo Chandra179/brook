@@ -8,13 +8,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
 
 	"brook/config"
@@ -22,7 +19,7 @@ import (
 	"brook/logger"
 	"brook/middleware"
 	"brook/modules/example"
-	"brook/modules/foo"
+	"brook/router"
 	"brook/store"
 )
 
@@ -45,26 +42,24 @@ func RunHttpServer() {
 		log.Fatalf("new logger: %v", err)
 	}
 
-	// ---- Datastores (Postgres + ArangoDB) ----
-	pool, err := store.NewPool(context.Background(), cfg.Postgres)
+	// ---- Datastores (SQLite + Badger, both embedded) ----
+	db, err := store.NewSQLite(context.Background(), cfg.SQLite.DSN)
 	if err != nil {
-		log.Fatalf("connect postgres: %v", err)
+		log.Fatalf("connect sqlite: %v", err)
 	}
-	defer pool.Close()
+	defer func() { _ = db.Close() }()
 
-	if _, err := store.NewArangoClient(context.Background(), cfg.ArangoDB); err != nil {
-		log.Fatalf("connect arangodb: %v", err)
+	kv, err := store.NewBadger(cfg.Badger.Dir)
+	if err != nil {
+		log.Fatalf("connect badger: %v", err)
 	}
+	defer func() { _ = kv.Close() }()
 
 	// ---- Middleware / modules ----
 	mdlw := middleware.NewDependencies(logger)
 	exampleDeps := example.NewDependencies(&example.DependenciesConfig{
 		Logger: logger,
-		Pool:   pool,
-	})
-	fooDeps := foo.NewDependencies(&foo.DependenciesConfig{
-		Logger:  logger,
-		Example: exampleDeps,
+		DB:     db,
 	})
 
 	if appEnvironment == "dev" {
@@ -74,27 +69,12 @@ func RunHttpServer() {
 	}
 
 	// ---- Router ----
-	r := gin.New()
-	_ = r.SetTrustedProxies(cfg.Middleware.RealIP.TrustedProxies)
-
-	r.Use(
-		gin.CustomRecovery(func(c *gin.Context, err any) {
-			logger.Error("panic recovered",
-				zap.String("panic", fmt.Sprintf("%v", err)),
-				zap.String("stack", string(debug.Stack())),
-			)
-			c.AbortWithStatus(http.StatusInternalServerError)
-		}),
-		middleware.RequestID,
-		mdlw.RequestLog(cfg.Middleware.RequestLog),
-	)
-
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	routerDeps := router.NewDependencies(&router.DependenciesConfig{
+		Logger:     logger,
+		RequestLog: mdlw.RequestLog(cfg.Middleware.RequestLog),
+		Example:    exampleDeps.HandleExample,
 	})
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	r.POST("/example", exampleDeps.HandleExample)
-	r.POST("/foo", fooDeps.HandleFoo)
+	r := routerDeps.New()
 
 	// ---- HTTP server + graceful shutdown ----
 	addr := fmt.Sprintf(":%s", cfg.HTTP.Port)

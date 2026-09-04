@@ -12,13 +12,9 @@ middleware:
   request_log:
     skip_paths: ["/health", "/metrics"]
     log_query: true
-  real_ip:
-    trusted_proxies: []
 
-postgres:
+sqlite:
   dsn: ""
-  max_conns: 25
-  min_conns: 5
 
-arangodb:
-  endpoints: ["http://arangodb:8529"]
+badger:
+  dir: ""

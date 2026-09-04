@@ -6,8 +6,8 @@ usage() {
 	echo "Example: $0 github.com/me/myproject"
 	echo ""
 	echo "Renames the Go module from 'brook' to <new-module-name>, and renames"
-	echo "the project's non-Go 'brook' references (Docker service name, Postgres"
-	echo "user/password/db, application_name in config, swagger title) to the"
+	echo "the project's non-Go 'brook' references (SQLite file, Badger dir,"
+	echo "swagger title) to the"
 	echo "last path segment of <new-module-name>."
 	exit 1
 }
@@ -63,33 +63,23 @@ if [ -d "cmd/example" ]; then
 	echo "  renamed cmd/example -> cmd/$new_name"
 fi
 
-# 8. Update Docker/Postgres project naming: service name, user/password/db,
-#    and DSNs across docker-compose.yml, .env.example, and CI.
-for f in docker-compose.yml .env.example .github/workflows/ci.yml; do
+# 8. Update embedded-store project naming: SQLite file, Badger dir, and the
+#    Makefile migrate targets across .env.example and CI.
+for f in .env.example .github/workflows/ci.yml; do
 		[ -f "$f" ] || continue
 		sed -i \
-			-e "s|^  $old_name:$|  $new_name:|" \
-			-e "s|postgres://$old_name:$old_name@|postgres://$new_name:$new_name@|g" \
-			-e "s|/$old_name?sslmode|/$new_name?sslmode|g" \
-			-e "s|POSTGRES_USER: $old_name|POSTGRES_USER: $new_name|" \
-			-e "s|POSTGRES_PASSWORD: $old_name|POSTGRES_PASSWORD: $new_name|" \
-			-e "s|POSTGRES_DB: $old_name|POSTGRES_DB: $new_name|" \
-			-e "s|ARANGO_ROOT_PASSWORD: $old_name|ARANGO_ROOT_PASSWORD: $new_name|" \
-			-e "s|ARANGODB_PASSWORD=$old_name|ARANGODB_PASSWORD=$new_name|" \
-			-e "s|ARANGODB_DATABASE=$old_name|ARANGODB_DATABASE=$new_name|" \
+			-e "s|^SQLITE_DSN=$old_name\.db|SQLITE_DSN=$new_name.db|" \
+			-e "s|^BADGER_DIR=$old_name|BADGER_DIR=$new_name|" \
 			"$f"
 	done
-echo "  updated docker-compose.yml, .env.example, .github/workflows/ci.yml"
+echo "  updated .env.example, .github/workflows/ci.yml"
 
-# 8. Update application_name and DSN placeholders in config/*.yaml
+# 8. Update SQLite/Badger placeholders in config/*.yaml
 for f in config/config_dev.yaml config/config_prd.yaml; do
 	[ -f "$f" ] || continue
 	sed -i \
-		-e "s|application_name: \"$old_name\.dev\"|application_name: \"$new_name.dev\"|" \
-		-e "s|application_name: \"$old_name\"|application_name: \"$new_name\"|" \
-		-e "s|postgres://$old_name:$old_name@|postgres://$new_name:$new_name@|g" \
-		-e "s|/$old_name?sslmode|/$new_name?sslmode|g" \
-		-e "s|database: \"$old_name\"|database: \"$new_name\"|" \
+		-e "s|dsn: \"$old_name\.db\"|dsn: \"$new_name.db\"|" \
+		-e "s|dir: \"$old_name\"|dir: \"$new_name\"|" \
 		"$f"
 done
 echo "  updated config/config_dev.yaml, config/config_prd.yaml"

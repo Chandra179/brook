@@ -8,8 +8,8 @@ import (
 
 type Config struct {
 	Logger     LoggerConfig     `yaml:"logger"`
-	Postgres   PostgresConfig   `yaml:"postgres"`
-	ArangoDB   ArangoDBConfig   `yaml:"arangodb"`
+	SQLite     SQLiteConfig     `yaml:"sqlite"`
+	Badger     BadgerConfig     `yaml:"badger"`
 	Middleware MiddlewareConfig `yaml:"middleware"`
 	HTTP       HTTPConfig       `yaml:"http"`
 }
@@ -23,7 +23,6 @@ type HTTPConfig struct {
 }
 
 type MiddlewareConfig struct {
-	RealIP     RealIPConfig     `yaml:"real_ip"`
 	RequestLog RequestLogConfig `yaml:"request_log"`
 }
 
@@ -32,27 +31,16 @@ type RequestLogConfig struct {
 	LogQuery  bool     `yaml:"log_query"`
 }
 
-type RealIPConfig struct {
-	TrustedProxies []string `yaml:"trusted_proxies"`
-}
-
 type LoggerConfig struct {
 	Level string `yaml:"level"`
 }
 
-type PostgresConfig struct {
-	DSN      string `yaml:"dsn"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	MaxConns int32  `yaml:"max_conns"`
-	MinConns int32  `yaml:"min_conns"`
+type SQLiteConfig struct {
+	DSN string `yaml:"dsn"`
 }
 
-type ArangoDBConfig struct {
-	Endpoints []string `yaml:"endpoints"`
-	Username  string   `yaml:"username"`
-	Password  string   `yaml:"password"`
-	Database  string   `yaml:"database"`
+type BadgerConfig struct {
+	Dir string `yaml:"dir"`
 }
 
 func Load(path string) (*Config, error) {
@@ -67,15 +55,12 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
-		cfg.Postgres.DSN = dsn
+	if dsn := os.Getenv("SQLITE_DSN"); dsn != "" {
+		cfg.SQLite.DSN = dsn
 	}
-	cfg.Postgres.Username = os.Getenv("POSTGRES_USERNAME")
-	cfg.Postgres.Password = os.Getenv("POSTGRES_PASSWORD")
-
-	cfg.ArangoDB.Database = os.Getenv("ARANGODB_DATABASE")
-	cfg.ArangoDB.Username = os.Getenv("ARANGODB_USERNAME")
-	cfg.ArangoDB.Password = os.Getenv("ARANGODB_PASSWORD")
+	if dir := os.Getenv("BADGER_DIR"); dir != "" {
+		cfg.Badger.Dir = dir
+	}
 
 	return &cfg, nil
 }
