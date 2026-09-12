@@ -8,3 +8,21 @@ pkgname: mocks
 packages:
   brook:
     config:
+  brook/modules/example:
+    config:
+      all: false
+      dir: "mocks/modules/example"
+      filename: "store_mock.go"
+      pkgname: mocks
+      structname: MockStore
+    interfaces:
+      store: {}
+  brook/server:
+    config:
+      all: false
+      dir: "mocks/server"
+      filename: "readiness_store_mock.go"
+      pkgname: mocks
+      structname: MockReadinessStore
+    interfaces:
+      readinessStore: {}

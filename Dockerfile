@@ -15,6 +15,7 @@ WORKDIR /app
 COPY --from=builder /app/main .
 COPY config/config_prd.yaml config/
 COPY config/config_dev.yaml config/
+COPY store/migrations store/migrations
 
 EXPOSE 8080
 

@@ -1,6 +1,7 @@
 # Modules
 
-Each module is a Go package under `modules/<name>/`. Module owns its domain logic, transport, and DI.
+Each module is a Go package under `modules/<name>/`. A module owns its domain
+logic, application behavior, transport, and dependency wiring.
 
 ## Required files
 
@@ -13,13 +14,19 @@ Each module is a Go package under `modules/<name>/`. Module owns its domain logi
 
 | File | Purpose |
 |------|---------|
-| `interface.go` | The module's interfaces together: the `Service` interface (what the module *provides* to other modules) and the unexported `store` interface (what it *requires*), each with its `var _ X = ...` compile-time assertion |
+| `interface.go` | The module's interfaces together: the provider-owned `Service` interface (what the module provides to real sibling consumers) and the package-private `store` interface (what it requires), each with its `var _ X = ...` compile-time assertion |
 | `handler.go` | Module entrypoint — HTTP handlers |
 | `business_error.go` | Domain sentinels (plain `errors.New(...)`, no non-stdlib imports) |
 | `constant.go` | Unexported package constants |
 | `<action>.go` | One file per handler/operation (e.g. `create_example.go`); holds the `*dependencies`/store method implementations that would otherwise live in `service.go`/`store.go` |
 
-There is no separate `service.go`/`store.go` — the `Service` and `store` interfaces live in `interface.go`, and their implementations are split across per-action files like `create_example.go`. Both interfaces are unexported-visible: `Service` is exported (used by sibling modules), `store` stays unexported since nothing outside the package needs to name it.
+There is no separate `service.go`/`store.go` — the `Service` and `store`
+interfaces live in `interface.go`, and implementations are split across
+per-action files like `create_example.go`. `Service` is exported only when a
+real sibling consumer needs it. `store` remains package-private because it is
+an implementation port. Mockery generates its test mock under `mocks/`; its
+method names are exported when an external generated mock must satisfy the
+private interface.
 
 ## Cross-module communication
 
@@ -42,8 +49,16 @@ A module that consumes a sibling depends on that sibling's `Service`
 interface, wired in via its own `DependenciesConfig`.
 
 `server/server.go` constructs the concrete `*dependencies` for each module,
-hands the pool to `NewDependencies`, and passes the returned value to siblings
-as the interface type (e.g. `exampleDeps` used as `example.Service`).
+passes infrastructure into `NewDependencies`, and passes the returned value to
+siblings as the provider's interface type (e.g. `exampleDeps` used as
+`example.Service`). HTTP handlers are then handed to `router/` for route
+registration.
 
-Only add a `Service` interface once a real second module needs to call in
-— don't add one to every module speculatively.
+Only add a `Service` interface for a real cross-module contract. Do not impose a
+universal one-public-interface rule: expose small provider-owned contracts when
+there are multiple meaningful consumers, and keep internal ports private.
+
+For tests, use the package-private `newDependencies` helper pattern (exposed
+to external tests only through `export_test.go`) to inject the Mockery-generated
+`store` mock. External sibling modules should mock the
+exported `Service` contract, not the provider's storage port.

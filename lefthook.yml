@@ -1,0 +1,12 @@
+min_version: 2.1.9
+assert_lefthook_installed: true
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: gofmt
+      run: make format-check
+    - name: lint
+      run: make lint
+    - name: test
+      run: make test

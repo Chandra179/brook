@@ -21,5 +21,9 @@ type storeDependencies struct {
 }
 
 func NewDependencies(deps *DependenciesConfig) *dependencies {
-	return &dependencies{logger: deps.Logger, store: &storeDependencies{db: deps.DB}}
+	return newDependencies(deps.Logger, &storeDependencies{db: deps.DB})
+}
+
+func newDependencies(logger *zap.Logger, store store) *dependencies {
+	return &dependencies{logger: logger, store: store}
 }

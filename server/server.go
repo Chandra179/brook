@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -25,6 +26,9 @@ import (
 
 func RunHttpServer() {
 	appEnvironment := os.Getenv("APP_ENVIRONMENT")
+	if appEnvironment != "dev" && appEnvironment != "prd" {
+		log.Fatalf("APP_ENVIRONMENT must be dev or prd, got %q", appEnvironment)
+	}
 
 	// ---- Config ----
 	configPath := "config/config_prd.yaml"
@@ -37,10 +41,16 @@ func RunHttpServer() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	logger, err := logger.NewLogger(appEnvironment)
+	logger, err := logger.NewLogger(
+		appEnvironment,
+		cfg.Logger.Level,
+		cfg.Logger.SamplingInitial,
+		cfg.Logger.SamplingThereafter,
+	)
 	if err != nil {
 		log.Fatalf("new logger: %v", err)
 	}
+	defer func() { _ = logger.Sync() }()
 
 	// ---- Datastores (SQLite + Badger, both embedded) ----
 	db, err := store.NewSQLite(context.Background(), cfg.SQLite.DSN)
@@ -70,9 +80,11 @@ func RunHttpServer() {
 
 	// ---- Router ----
 	routerDeps := router.NewDependencies(&router.DependenciesConfig{
-		Logger:     logger,
-		RequestLog: mdlw.RequestLog(cfg.Middleware.RequestLog),
-		Example:    exampleDeps.HandleExample,
+		Logger:           logger,
+		RequestLog:       mdlw.RequestLog(cfg.Middleware.RequestLog),
+		RequestBodyLimit: middleware.RequestBodyLimit(cfg.HTTP.MaxBodySizeInBytes),
+		Readiness:        readinessHandler(db, kv),
+		Example:          exampleDeps.HandleExample,
 	})
 	r := routerDeps.New()
 
@@ -119,5 +131,28 @@ func RunHttpServer() {
 			return
 		}
 		logger.Info("HTTP server stopped")
+	}
+}
+
+type readinessStore interface {
+	IsClosed() bool
+}
+
+func readinessHandler(db *sql.DB, kv readinessStore) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), time.Second)
+		defer cancel()
+
+		if err := db.PingContext(ctx); err != nil {
+			_ = c.Error(errors.New("sqlite readiness check failed"))
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready"})
+			return
+		}
+		if kv.IsClosed() {
+			_ = c.Error(errors.New("badger readiness check failed"))
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
 	}
 }

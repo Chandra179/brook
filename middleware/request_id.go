@@ -17,6 +17,8 @@ const requestIDKey contextKey = "requestID"
 const headerKey = "X-Request-ID"
 const grpcMetaKey = "x-request-id"
 
+const maxRequestIDLength = 128
+
 func generateRequestID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
@@ -37,12 +39,30 @@ func GetRequestID(ctx context.Context) string {
 // in the request context and echoed in the response header.
 func RequestID(c *gin.Context) {
 	id := c.GetHeader(headerKey)
-	if id == "" {
+	if !validRequestID(id) {
 		id = generateRequestID()
 	}
 	c.Header(headerKey, id)
 	c.Request = c.Request.WithContext(storeRequestID(c.Request.Context(), id))
 	c.Next()
+}
+
+func validRequestID(id string) bool {
+	if len(id) == 0 || len(id) > maxRequestIDLength {
+		return false
+	}
+
+	for i := 0; i < len(id); i++ {
+		char := id[i]
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '_' || char == '.' || char == ':' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // RequestIDUnaryInterceptor is a gRPC unary server interceptor. It reads
@@ -60,7 +80,7 @@ func RequestIDUnaryInterceptor(
 			id = vals[0]
 		}
 	}
-	if id == "" {
+	if !validRequestID(id) {
 		id = generateRequestID()
 	}
 	_ = grpc.SetHeader(ctx, metadata.Pairs(grpcMetaKey, id))

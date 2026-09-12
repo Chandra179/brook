@@ -34,8 +34,9 @@ echo "Renaming module '$old' -> '$new' (project name '$old_name' -> '$new_name')
 sed -i "s|^module $old\$|module $new|" go.mod
 echo "  updated go.mod"
 
-# 2. Update import paths in all .go files
-find . -name '*.go' -exec sed -i "s|\"$old/|\"$new/|g" {} +
+# 2. Update import paths in repository .go files, excluding generated/vendor
+#    dependencies and Git metadata.
+find . -path './vendor' -prune -o -path './.git' -prune -o -type f -name '*.go' -exec sed -i "s|\"$old/|\"$new/|g" {} +
 echo "  updated import paths in .go files"
 
 # 3. Also check .proto files if any
@@ -48,8 +49,11 @@ fi
 sed -i "s|^\(\s*- \)$old\$|\1$new|" .golangci.yml
 echo "  updated .golangci.yml"
 
-# 5. Update mockery's packages key, which mirrors the full module path
-sed -i "s|^\(\s*\)$old:$|\1$new:|" .mockery.yaml
+# 5. Update mockery package keys, which mirror the full module path
+sed -i \
+	-e "s|^\(\s*\)$old:$|\1$new:|" \
+	-e "s|^\(\s*\)$old/|\1$new/|" \
+	.mockery.yaml
 echo "  updated .mockery.yaml"
 
 # 6. Update the swagger @title annotation (source of truth for docs/, which
@@ -84,13 +88,32 @@ for f in config/config_dev.yaml config/config_prd.yaml; do
 done
 echo "  updated config/config_dev.yaml, config/config_prd.yaml"
 
-# 9. Update Makefile references to the entrypoint directory.
+# 9. Update project documentation and the Docker build entrypoint. Markdown is
+#    the source for project guidance and ADR prose; generated Swagger is handled
+#    below through make swag when that tool is installed.
+find . -path './vendor' -prune -o -path './.git' -prune -o -type f -name '*.md' -exec sed -i \
+	-e "s|$old/|$new/|g" \
+	-e "s|cmd/example|cmd/$new_name|g" \
+	-e "s|\\<Brook\\>|$new_title|g" \
+	-e "s|\\<brook\\>|$new_name|g" \
+	{} +
+sed -i "s|cmd/example|cmd/$new_name|g" Dockerfile
+echo "  updated Markdown guidance and Dockerfile"
+
+# 10. Update Makefile references to the entrypoint directory.
 sed -i \
 	-e "s|cmd/example/main.go|cmd/$new_name/main.go|g" \
 	-e "s|./cmd/example/|./cmd/$new_name/|g" \
 	Makefile
 echo "  updated Makefile entrypoint references"
 
-echo "Done. Run 'go build ./...' to verify, 'make swag' to regenerate docs/,"
-echo "and review README.md/CLAUDE.md/AGENTS.md, which describe 'brook' in prose"
-echo "and are not rewritten by this script."
+# 11. Regenerate generated Swagger when the tool is available. Never hand-edit
+#     generated docs; otherwise leave an explicit follow-up for the caller.
+if command -v swag >/dev/null 2>&1; then
+	make swag
+	echo "  regenerated docs/"
+else
+	echo "  swag not found; run 'make swag' to regenerate docs/"
+fi
+
+echo "Done. Run 'go build ./...' to verify the renamed module."

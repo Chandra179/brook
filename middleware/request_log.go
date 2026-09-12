@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"net/http"
+	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +18,11 @@ import (
 // Error 5xx); a handler's c.Error(err) is attached for 4xx/5xx. Request
 // and response bodies are never logged. Details: docs/logging.md.
 func (d *dependencies) RequestLog(cfg config.RequestLogConfig) gin.HandlerFunc {
+	queryAllowlist := make(map[string]struct{}, len(cfg.QueryAllowlist))
+	for _, key := range cfg.QueryAllowlist {
+		queryAllowlist[key] = struct{}{}
+	}
+
 	return func(c *gin.Context) {
 		if slices.Contains(cfg.SkipPaths, c.Request.URL.Path) {
 			c.Next()
@@ -28,9 +35,14 @@ func (d *dependencies) RequestLog(cfg config.RequestLogConfig) gin.HandlerFunc {
 		duration := time.Since(start)
 		status := c.Writer.Status()
 
+		route := c.FullPath()
+		if route == "" {
+			route = "<unmatched>"
+		}
+
 		fields := []zap.Field{
 			zap.String("method", c.Request.Method),
-			zap.String("path", c.Request.URL.Path),
+			zap.String("path", route),
 			zap.Int("status", status),
 			zap.Int64("duration_ms", duration.Milliseconds()),
 		}
@@ -39,8 +51,10 @@ func (d *dependencies) RequestLog(cfg config.RequestLogConfig) gin.HandlerFunc {
 			fields = append(fields, zap.String("request_id", reqID))
 		}
 
-		if cfg.LogQuery && c.Request.URL.RawQuery != "" {
-			fields = append(fields, zap.String("query", c.Request.URL.RawQuery))
+		if cfg.LogQuery {
+			if query := queryForLog(c.Request.URL.Query(), queryAllowlist); query != "" {
+				fields = append(fields, zap.String("query", query))
+			}
 		}
 
 		switch {
@@ -52,6 +66,34 @@ func (d *dependencies) RequestLog(cfg config.RequestLogConfig) gin.HandlerFunc {
 			d.logger.Info("request completed", fields...)
 		}
 	}
+}
+
+func queryForLog(query url.Values, allowlist map[string]struct{}) string {
+	filtered := make(url.Values)
+	for key, values := range query {
+		if _, allowed := allowlist[key]; !allowed {
+			continue
+		}
+
+		for _, value := range values {
+			if isSensitiveQueryKey(key) {
+				value = "[REDACTED]"
+			}
+			filtered.Add(key, value)
+		}
+	}
+
+	return filtered.Encode()
+}
+
+func isSensitiveQueryKey(key string) bool {
+	key = strings.ToLower(key)
+	for _, fragment := range []string{"auth", "code", "key", "password", "secret", "signature", "state", "token"} {
+		if strings.Contains(key, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 // withLastError appends the last error recorded via c.Error(err) to fields,
