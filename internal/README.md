@@ -1,13 +1,13 @@
 # Modules
 
-Each module is a Go package under `modules/<name>/`. A module owns its domain
+Each module is a Go package under `internal/<name>/`. A module owns its domain
 logic, application behavior, transport, and dependency wiring.
 
 ## Required files
 
 | File | Purpose |
 |------|---------|
-| `dependencies.go` | Exported `DependenciesConfig` struct callers fill in; unexported `dependencies` struct holding the module's wired deps (e.g. `logger`, `store`); `NewDependencies(*DependenciesConfig) *dependencies` constructor. For a module with persistence, `DependenciesConfig` takes the shared `*sql.DB` (SQLite) and `NewDependencies` builds the store internally (see `modules/example/dependencies.go`) — callers never construct the store directly. Handlers are methods on `*dependencies`. |
+| `dependencies.go` | Exported `DependenciesConfig` struct callers fill in; unexported `dependencies` struct holding the module's wired deps (e.g. `logger`, `store`); `NewDependencies(*DependenciesConfig) *dependencies` constructor. For a module with persistence, `DependenciesConfig` takes the shared `*sql.DB` (SQLite) and `NewDependencies` builds the store internally (see `internal/example/dependencies.go`) — callers never construct the store directly. Handlers are methods on `*dependencies`. |
 | `types.go` | Domain types, structs, constants |
 
 ## Optional files
@@ -37,7 +37,7 @@ and holding a sibling module's concrete `*dependencies` type directly.
   modules. It's the module's own public contract:
 
 ```go
-// modules/example/interface.go — example provides this to callers
+// internal/example/interface.go — example provides this to callers
 type Service interface {
     CreateExample(ctx context.Context, name string) (*Example, error)
 }

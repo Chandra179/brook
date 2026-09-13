@@ -8,7 +8,7 @@ Go modular monolith skeleton. One binary, domain modules as Go packages. Split t
 cmd/example/main.go     # entrypoint — starts HTTP server
 server/                 # assembles config, datastores, modules; graceful shutdown
 router/                 # builds the Gin engine (middleware chain + routes)
-modules/                # domain modules
+internal/               # domain modules
   example/              #   reference module
     dependencies.go     #     wire deps, construct store
     interface.go        #     Service + store interfaces
@@ -65,7 +65,7 @@ make migrate-create name=<name>  # goose -dir store/migrations/sqlite create <na
 
 Real CI is `.github/workflows/ci.yml` (go mod verify → golangci-lint → test → build → docker build).
 
-To run a single test: `go test -run TestName ./modules/example/...`.
+To run a single test: `go test -run TestName ./internal/example/...`.
 
 For a fresh development database, apply the migration first with
 `SQLITE_DSN=brook.db make migrate-up`.
@@ -74,7 +74,7 @@ For a fresh development database, apply the migration first with
 
 - Framework: Gin. Handlers are `gin.HandlerFunc` methods on a module's unexported `*dependencies` struct.
 - Validation via `c.ShouldBindJSON(&req)` + `binding` struct tags inside handlers.
-- No `internal/` sub-packages inside modules.
+- Domain modules live under the top-level `internal/` package boundary.
 - Shared config is flat (`http`, `logger`, `middleware`, `sqlite`, `badger`) — not nested per-module.
 - No global state — deps injected via constructor.
 - Logger: `go.uber.org/zap` used directly (no wrapper). Built via

@@ -33,7 +33,7 @@ Run a focused test with `go test -run TestName ./path/to/package`.
   stores, constructs modules, creates the router, and owns graceful shutdown.
 - `router/` owns HTTP middleware registration and route mapping. It receives
   module handler functions from `server/`; it does not construct domain modules.
-- `modules/<name>/` owns a bounded domain area, its application behavior, HTTP
+- `internal/<name>/` owns a bounded domain area, its application behavior, HTTP
   handlers, and the storage port it needs. Modules communicate in-process via
   an exported provider-owned `Service` interface only when a real consumer
   exists.
@@ -92,7 +92,7 @@ gin.CustomRecovery → RequestID → RequestBodyLimit → RequestLog → handler
 
 ## Module pattern
 
-Copy `modules/example/` as the reference shape:
+Copy `internal/example/` as the reference shape:
 
 - `dependencies.go`: exported `DependenciesConfig`, unexported wired
   `dependencies`, and `NewDependencies`.

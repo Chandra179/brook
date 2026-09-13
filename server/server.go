@@ -17,9 +17,9 @@ import (
 
 	"brook/config"
 	_ "brook/docs"
+	"brook/internal/example"
 	"brook/logger"
 	"brook/middleware"
-	"brook/modules/example"
 	"brook/router"
 	"brook/store"
 )

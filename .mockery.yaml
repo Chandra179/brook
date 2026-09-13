@@ -8,10 +8,10 @@ pkgname: mocks
 packages:
   brook:
     config:
-  brook/modules/example:
+  brook/internal/example:
     config:
       all: false
-      dir: "mocks/modules/example"
+      dir: "mocks/example"
       filename: "store_mock.go"
       pkgname: mocks
       structname: MockStore

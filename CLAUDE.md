@@ -7,7 +7,7 @@ recorded in [`docs/adr/0001-modular-monolith-production-boundaries.md`](docs/adr
 ## Source of truth
 
 - Repository workflow and implementation constraints: `AGENTS.md`
-- Module structure and cross-module contracts: `modules/README.md`
+- Module structure and cross-module contracts: `internal/README.md`
 - Coding conventions: `docs/style.md`
 - Error handling: `docs/errors.md`
 - Logging and redaction: `docs/logging.md`
@@ -22,7 +22,7 @@ stale documentation as part of the change.
 cmd/example/main.go     entrypoint
 server/                  composition root and graceful shutdown
 router/                  Gin middleware and route registration
-modules/<name>/          domain module, handler, service, storage port
+internal/<name>/         domain module, handler, service, storage port
 middleware/              recovery, request ID, body limit, request logging
 config/                  YAML loader, env overrides, validation
 logger/                  zap configuration

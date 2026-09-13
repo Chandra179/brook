@@ -5,7 +5,7 @@
 package mocks
 
 import (
-	"brook/modules/example"
+	"brook/internal/example"
 	"context"
 
 	mock "github.com/stretchr/testify/mock"

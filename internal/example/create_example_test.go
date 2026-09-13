@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	examplemocks "brook/mocks/modules/example"
-	brookexample "brook/modules/example"
+	brookexample "brook/internal/example"
+	examplemocks "brook/mocks/example"
 
 	"go.uber.org/zap"
 )
