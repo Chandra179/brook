@@ -20,6 +20,8 @@ type storeDependencies struct {
 	db *sql.DB
 }
 
+var _ Service = (*dependencies)(nil)
+
 func NewDependencies(deps *DependenciesConfig) *dependencies {
 	return newDependencies(deps.Logger, &storeDependencies{db: deps.DB})
 }
