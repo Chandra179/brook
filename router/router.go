@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"net/http"
 	"runtime/debug"
 
@@ -19,13 +18,12 @@ func (d *dependencies) New() *gin.Engine {
 	r := gin.New()
 
 	middlewareChain := []gin.HandlerFunc{
-		gin.CustomRecovery(func(c *gin.Context, err any) {
+		gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, _ any) {
 			path := c.FullPath()
 			if path == "" {
 				path = "<unmatched>"
 			}
 			fields := []zap.Field{
-				zap.String("panic", fmt.Sprintf("%v", err)),
 				zap.String("stack", string(debug.Stack())),
 				zap.String("method", c.Request.Method),
 				zap.String("path", path),

@@ -31,6 +31,8 @@ Run a focused test with `go test -run TestName ./path/to/package`.
 
 - The composition root is `server/`: it loads configuration, opens embedded
   stores, constructs modules, creates the router, and owns graceful shutdown.
+  `cmd/example/main.go` owns signal handling and process exit; the server
+  accepts a context and returns errors after cleanup.
 - `router/` owns HTTP middleware registration and route mapping. It receives
   module handler functions from `server/`; it does not construct domain modules.
 - `internal/<name>/` owns a bounded domain area, its application behavior, HTTP
@@ -70,7 +72,7 @@ Run a focused test with `go test -run TestName ./path/to/package`.
 Middleware order is:
 
 ```text
-gin.CustomRecovery → RequestID → RequestBodyLimit → RequestLog → handler
+gin.CustomRecoveryWithWriter(nil) → RequestID → RequestBodyLimit → RequestLog → handler
 ```
 
 - `RequestID` accepts a bounded safe `X-Request-ID` value or generates a
@@ -81,10 +83,13 @@ gin.CustomRecovery → RequestID → RequestBodyLimit → RequestLog → handler
   request or response bodies.
 - Query logging is disabled in production. If enabled, only configured
   allowlisted keys are logged and sensitive-looking keys are redacted.
-- Handlers attach errors with `c.Error(err)` before writing an error response.
-  The request logger is the HTTP logging boundary; lower layers wrap and return
-  errors but do not log them. Error messages must not contain secrets.
-- Recovery logs panic details with method, route, and request ID. It remains in
+- Handlers attach errors with `c.Error(err).SetMeta(middleware.SafeErrorMessage("static message"))`
+  before writing an error response. The request logger emits only that approved
+  message, or `request failed` when it is absent; it never formats the raw
+  error. Lower layers wrap and return errors but do not log them. Do not put
+  submitted values or secrets in error context or safe messages.
+- Recovery logs a stack with method, route, and request ID, omitting the panic
+  value and Gin's default recovery output. It remains in
   the application because a gateway cannot observe failures inside the process.
 - Gateways may own TLS, WAF, edge authentication, rate limiting, routing, and
   edge access logs. They do not replace application authorization, validation,

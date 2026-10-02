@@ -19,6 +19,10 @@ use [`go.uber.org/zap`](https://pkg.go.dev/go.uber.org/zap), configured in
   correlate instead.
 * **Never log secrets** — auth headers, tokens, passwords, API keys — at
   any level.
+* **Only approved error text enters request logs.** A handler attaches the
+  original error with `c.Error(err)` for error identity and sets static
+  `middleware.SafeErrorMessage` metadata. Missing, empty, or plain-string
+  metadata logs `request failed`. The logger never formats the original error.
 * **Query logging is opt-in.** Production disables it. When enabled, only
   configured allowlisted keys are included, and keys containing sensitive
   fragments are logged as `[REDACTED]`.
@@ -28,12 +32,14 @@ use [`go.uber.org/zap`](https://pkg.go.dev/go.uber.org/zap), configured in
 
 ## Surfacing an error from a handler
 
-Call `c.Error(err)` before writing the response — `RequestLog` logs it, you
-never call the logger yourself:
+Attach the original error with a reviewed, static log message before writing
+the response. `RequestLog` logs that message; handlers do not log separately:
 
 ```go
 if err != nil {
-	_ = c.Error(fmt.Errorf("get example %s: %w", id, err)) // wrap per errors.md
+	_ = c.Error(fmt.Errorf("get example: %w", err)).SetMeta(
+		middleware.SafeErrorMessage("get example failed"),
+	)
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 	return
 }
@@ -41,9 +47,10 @@ if err != nil {
 
 ## Stack traces
 
-zap attaches these automatically by level. The recovery middleware includes a
-stack because it is converting a panic into an error response; never add one in
-a handler:
+zap attaches these automatically by level. Recovery also records a stack,
+method, route, and request ID. Gin's separate recovery writer is disabled and
+the panic value is omitted because either can contain request data. Never add
+a stack in a handler:
 
 * **Production**: `Error`+ only (5xx, panics).
 * **Development**: `Warn`+ (4xx too).

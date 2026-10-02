@@ -3,7 +3,7 @@
 Gin middleware used by the HTTP server. Registered in order via `r.Use(...)`:
 
 ```
-gin.CustomRecovery → RequestID → RequestBodyLimit → RequestLog → handler
+gin.CustomRecoveryWithWriter(nil) → RequestID → RequestBodyLimit → RequestLog → handler
 ```
 
 ## Files
@@ -12,7 +12,7 @@ gin.CustomRecovery → RequestID → RequestBodyLimit → RequestLog → handler
 |------|------|-------------|
 | `dependencies.go` | infra | Holds the `*zap.Logger` used by stateful middleware |
 | `request_id.go` | middleware | Reads/reuses `X-Request-ID` header, generating a random ID if absent. Stores the ID in context, echoes it in the response. Also exports `RequestIDUnaryInterceptor` for gRPC and `GetRequestID(ctx)` for handlers. |
-| `request_log.go` | middleware | Logs one canonical line per normal request: method, route pattern, status, duration, request ID, and optional allowlisted query params. Level tracks response status (Info for 2xx/3xx, Warn for 4xx, Error for 5xx); the last error attached via `c.Error(err)` is included for 4xx/5xx. Skips configured paths. Neither request nor response bodies are logged (see comment in file). Full rationale and log-level/stacktrace behavior: [`docs/logging.md`](../docs/logging.md). |
+| `request_log.go` | middleware | Logs one canonical line per normal request: method, route pattern, status, duration, request ID, and optional allowlisted query params. For 4xx/5xx, it includes only approved `SafeErrorMessage` metadata from the last attached error, or `request failed`. Skips configured paths. Neither request nor response bodies are logged. Full rationale: [`docs/logging.md`](../docs/logging.md). |
 | `RequestBodyLimit` | middleware | Wraps request bodies with `http.MaxBytesReader` to reject oversized payloads before handlers decode them. |
 
 ## Why no body logging?
@@ -30,7 +30,7 @@ Gin's `engine.SetTrustedProxies()` + `c.ClientIP()` handle `X-Forwarded-For` / `
 
 ## Why no Recovery middleware?
 
-`gin.CustomRecovery` handles panics and writes a 500 response. The recovery callback uses `zap` so stack traces go to structured logs, not stdout.
+`gin.CustomRecoveryWithWriter(nil, ...)` handles panics and writes a 500 response. Its default writer is disabled; the callback logs a stack, method, route, and request ID through `zap` without formatting the panic value.
 
 ## Why no validation middleware?
 

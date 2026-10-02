@@ -42,8 +42,9 @@ docs/adr/                accepted architectural decisions
   must be `dev` or `prd`; required datastore values must be non-empty.
 - Run migrations as a deployment step before rollout, never from application
   startup. The runtime image contains the migration SQL files.
-- Keep request logging centralized. Handlers call `c.Error(err)`; lower layers
-  wrap and return without logging the same error again.
+- Keep request logging centralized. Handlers attach errors with static
+  `middleware.SafeErrorMessage` metadata via `c.Error(err).SetMeta(...)`;
+  lower layers wrap and return without logging the same error again.
 - Never log request/response bodies, secrets, raw credentials, or unrestricted
   query strings. Production query logging is off by default.
 - Keep production access-log sampling explicit and configurable; audit events

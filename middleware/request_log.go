@@ -16,7 +16,8 @@ import (
 // RequestLog returns Gin middleware that logs one canonical line per HTTP
 // request. Level follows the response status (Info 2xx/3xx, Warn 4xx,
 // Error 5xx); a handler's c.Error(err) is attached for 4xx/5xx. Request
-// and response bodies are never logged. Details: docs/logging.md.
+// and response bodies are never logged. Only SafeErrorMessage metadata from
+// c.Error(err).SetMeta(...) may provide an error message. Details: docs/logging.md.
 func (d *dependencies) RequestLog(cfg config.RequestLogConfig) gin.HandlerFunc {
 	queryAllowlist := make(map[string]struct{}, len(cfg.QueryAllowlist))
 	for _, key := range cfg.QueryAllowlist {
@@ -96,12 +97,19 @@ func isSensitiveQueryKey(key string) bool {
 	return false
 }
 
-// withLastError appends the last error recorded via c.Error(err) to fields,
-// if any. Only called for 4xx/5xx responses; 2xx/3xx never carry an error
-// field.
+// SafeErrorMessage marks a reviewed, static message that may appear in request
+// logs. Never construct it from request values or an underlying error string.
+type SafeErrorMessage string
+
+// withLastError emits only explicitly approved metadata for the last error.
+// Unknown metadata and raw error strings are never logged.
 func withLastError(c *gin.Context, fields []zap.Field) []zap.Field {
 	if err := c.Errors.Last(); err != nil {
-		return append(fields, zap.Error(err.Err))
+		message := "request failed"
+		if safe, ok := err.Meta.(SafeErrorMessage); ok && safe != "" {
+			message = string(safe)
+		}
+		return append(fields, zap.String("error", message))
 	}
 	return fields
 }

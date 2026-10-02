@@ -70,6 +70,10 @@ To run a single test: `go test -run TestName ./internal/example/...`.
 For a fresh development database, apply the migration first with
 `SQLITE_DSN=brook.db make migrate-up`.
 
+The entrypoint owns signal handling and process exit. `server.RunHttpServer(ctx)`
+returns errors after the HTTP listener and embedded stores have stopped. During
+draining, `/ready` returns 503; a shutdown timeout closes active connections.
+
 ## Design choices
 
 - Framework: Gin. Handlers are `gin.HandlerFunc` methods on a module's unexported `*dependencies` struct.
