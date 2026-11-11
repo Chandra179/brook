@@ -22,7 +22,7 @@ stale documentation as part of the change.
 cmd/example/main.go     entrypoint
 server/                  composition root and graceful shutdown
 router/                  Gin middleware and route registration
-internal/<name>/         domain module, handler, service, storage port
+internal/<name>/         domain module, handler, service, persistence
 middleware/              recovery, request ID, body limit, request logging
 config/                  YAML loader, env overrides, validation
 logger/                  zap configuration
@@ -33,8 +33,8 @@ docs/adr/                accepted architectural decisions
 ## Working rules
 
 - Construct dependencies in `server/` and inject them through constructors.
-- Keep module storage interfaces package-private and module domain errors free
-  from HTTP knowledge.
+- Keep persistence concrete inside modules unless a real substitution boundary
+  calls for an interface, and keep module domain errors free of HTTP knowledge.
 - Use provider-owned `Service` interfaces only for real in-process consumers;
   do not couple modules to sibling concrete dependency structs.
 - Register module handlers in `router/` through `router.NewDependencies`.

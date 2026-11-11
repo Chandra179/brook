@@ -16,8 +16,8 @@ expensive.
 ### 1. Keep a modular monolith
 
 Each domain module is a Go package that owns its domain behavior, transport
-handlers, dependency wiring, and storage port. The `server/` package is the
-composition root and `router/` owns HTTP route registration.
+handlers, dependency wiring, and persistence implementation. The `server/`
+package is the composition root and `router/` owns HTTP route registration.
 
 Modules communicate in-process through a small provider-owned `Service`
 interface only when a real sibling consumer exists. A module does not hold a
@@ -27,18 +27,12 @@ This gives the team package-level ownership and test seams without paying the
 deployment, network, consistency, and operational cost of microservices before
 those costs solve a real problem.
 
-### 2. Keep storage ports private to modules
+### 2. Keep persistence concrete inside modules
 
-Each module defines the package-private `store` interface it needs. The shared
-`store/` package exposes infrastructure constructors but no domain repository
-contract. The module constructor receives the shared SQLite connection and
-builds its concrete storage implementation internally.
-
-The storage interface itself stays private. Mockery generates its mock under
-`mocks/`; its method names are exported when an external generated mock must
-satisfy the private interface. A test-only `export_test.go` wrapper exposes the
-package-private constructor seam to external tests without adding it to the
-production API.
+Each module uses its shared SQLite connection directly for its persistence
+operations. The shared `store/` package exposes infrastructure constructors
+but no domain repository contract. Add an interface only when a real consumer
+or substitution boundary needs one.
 
 ### 3. Validate configuration before dependency startup
 

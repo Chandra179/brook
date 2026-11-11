@@ -16,94 +16,46 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"brook/config"
 	"brook/internal/example"
 	"brook/middleware"
-	examplemocks "brook/mocks/example"
 	"brook/store"
 )
-
-func TestCreateExampleUsesStoreContextAndResult(t *testing.T) {
-	storage := examplemocks.NewMockStore(t)
-	ctx := context.WithValue(context.Background(), contextKey{}, "request")
-	want := &example.Example{ID: "example-id", Name: "brook"}
-	storage.EXPECT().CreateExample(ctx, "brook").Return(want, nil).Once()
-	deps := example.NewDependenciesForTest(zap.NewNop(), storage)
-
-	got, err := deps.CreateExample(ctx, "brook")
-	if err != nil || got != want {
-		t.Fatalf("CreateExample() = (%v, %v), want (%v, nil)", got, err, want)
-	}
-}
-
-type contextKey struct{}
-
-func TestCreateExampleRejectsReservedNameBeforeStore(t *testing.T) {
-	storage := examplemocks.NewMockStore(t)
-	deps := example.NewDependenciesForTest(zap.NewNop(), storage)
-
-	got, err := deps.CreateExample(context.Background(), "admin")
-	if got != nil || !errors.Is(err, example.ErrReservedName) {
-		t.Fatalf("CreateExample() = (%v, %v), want reserved-name error", got, err)
-	}
-	storage.AssertNotCalled(t, "CreateExample", mock.Anything, mock.Anything)
-}
-
-func TestCreateExamplePreservesCauseWithoutEmbeddingName(t *testing.T) {
-	storage := examplemocks.NewMockStore(t)
-	cause := errors.New("private database detail")
-	storage.EXPECT().CreateExample(mock.Anything, "private-name").Return(nil, cause).Once()
-	deps := example.NewDependenciesForTest(zap.NewNop(), storage)
-
-	_, err := deps.CreateExample(context.Background(), "private-name")
-	if !errors.Is(err, cause) || strings.Contains(err.Error(), "private-name") {
-		t.Fatalf("CreateExample error = %q, want wrapped cause without submitted name", err)
-	}
-}
 
 func TestHandleExampleMapsErrorsAndKeepsLogsSafe(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tests := []struct {
-		name        string
-		body        string
-		storeName   string
-		storeResult *example.Example
-		storeErr    error
-		response    string
-		logMessage  string
-		status      int
+		name       string
+		body       string
+		response   string
+		logMessage string
+		status     int
+		closedDB   bool
 	}{
 		{name: "malformed JSON", body: `{"name":`, status: http.StatusBadRequest, response: "invalid request", logMessage: "invalid create example request"},
 		{name: "private malformed JSON", body: `{"name":"private body"`, status: http.StatusBadRequest, response: "invalid request", logMessage: "invalid create example request"},
 		{name: "missing name", body: `{}`, status: http.StatusBadRequest, response: "invalid request", logMessage: "invalid create example request"},
 		{name: "reserved name", body: `{"name":"admin"}`, status: http.StatusConflict, response: "name is reserved", logMessage: "name is reserved"},
-		{name: "store failure", body: `{"name":"private-name"}`, storeName: "private-name", storeErr: errors.New("private database detail"), status: http.StatusInternalServerError, response: "internal error", logMessage: "create example failed"},
-		{name: "created", body: `{"name":"brook"}`, storeName: "brook", storeResult: &example.Example{ID: "example-id", Name: "brook", CreatedAt: time.Now()}, status: http.StatusCreated, response: "example-id"},
+		{name: "store failure", body: `{"name":"private-name"}`, closedDB: true, status: http.StatusInternalServerError, response: "internal error", logMessage: "create example failed"},
+		{name: "created", body: `{"name":"brook"}`, status: http.StatusCreated, response: "brook"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := examplemocks.NewMockStore(t)
-			if tt.storeName != "" {
-				storage.EXPECT().CreateExample(mock.Anything, tt.storeName).Return(tt.storeResult, tt.storeErr).Once()
-			}
 			var output bytes.Buffer
 			core := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(&output), zap.InfoLevel)
 			log := zap.New(core)
-			deps := example.NewDependenciesForTest(log, storage)
+			db := openMigratedExampleDB(t, filepath.Join(t.TempDir(), "handler.db"))
+			if tt.closedDB {
+				if err := db.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			deps := example.NewDependencies(&example.DependenciesConfig{Logger: log, DB: db})
 			r := gin.New()
 			r.Use(middleware.RequestID, middleware.NewDependencies(log).RequestLog(config.RequestLogConfig{}))
-			r.Use(func(c *gin.Context) {
-				c.Next()
-				if tt.storeErr != nil {
-					if attached := c.Errors.Last(); attached == nil || !errors.Is(attached.Err, tt.storeErr) {
-						t.Errorf("handler did not attach the original store error")
-					}
-				}
-			})
 			r.POST("/example", deps.HandleExample)
 
 			req := httptest.NewRequest(http.MethodPost, "/example", strings.NewReader(tt.body))
@@ -116,7 +68,7 @@ func TestHandleExampleMapsErrorsAndKeepsLogsSafe(t *testing.T) {
 				t.Fatalf("response = (%d, %q), want (%d, %q)", response.Code, response.Body.String(), tt.status, tt.response)
 			}
 			line := output.String()
-			if !strings.Contains(line, "request-123") || strings.Contains(line, "private-name") || strings.Contains(line, "private body") || strings.Contains(line, "private database detail") {
+			if !strings.Contains(line, "request-123") || strings.Contains(line, "private-name") || strings.Contains(line, "private body") || strings.Contains(line, "database is closed") {
 				t.Fatalf("unsafe request log: %q", line)
 			}
 			if tt.logMessage != "" && !strings.Contains(line, tt.logMessage) {

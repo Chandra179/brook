@@ -36,7 +36,7 @@ Run a focused test with `go test -run TestName ./path/to/package`.
 - `router/` owns HTTP middleware registration and route mapping. It receives
   module handler functions from `server/`; it does not construct domain modules.
 - `internal/<name>/` owns a bounded domain area, its application behavior, HTTP
-  handlers, and the storage port it needs. Modules communicate in-process via
+  handlers, and the persistence it needs. Modules communicate in-process via
   an exported provider-owned `Service` interface only when a real consumer
   exists.
 - `store/` contains infrastructure constructors only. It has no domain
@@ -102,21 +102,15 @@ Copy `internal/example/` as the reference shape:
 - `dependencies.go`: exported `DependenciesConfig`, unexported wired
   `dependencies`, and `NewDependencies`.
 - `types.go`: domain types.
-- `interface.go`: the provider-owned exported `Service` contract and the
-  package-private `store` port, each with a compile-time assertion.
+- `interface.go`: the provider-owned exported `Service` contract with a
+  compile-time assertion, when a real sibling consumer exists.
 - `handler.go`: transport and HTTP status mapping.
 - `<action>.go`: service and storage implementation for one operation.
 - `business_error.go`: domain sentinels with no HTTP dependencies.
 
-The package-private `store` interface deliberately keeps persistence out of the
-module's public API. Mockery generates its mock under `mocks/`; storage method
-names are exported when the external generated mock must satisfy the private
-interface. `newDependencies` is package-private, with an `export_test.go`
-wrapper for external tests.
-
 Do not impose a universal “one public interface per module” rule. Expose only
 small provider-owned contracts that have real consumers; keep implementation
-ports private where possible.
+details concrete unless a real substitution boundary requires an interface.
 
 ## Testing and boundaries
 
@@ -125,8 +119,8 @@ behavior should also have SQLite integration coverage where useful. Tests must
 cover configuration validation, request correlation, redaction, error mapping,
 and readiness behavior as those are operational contracts.
 
-Use Mockery-generated mocks for reusable interface seams; keep them under
-`mocks/` and do not hand-write duplicate fakes in each test file.
+Use Mockery-generated mocks for reusable interfaces with real consumers; keep
+them under `mocks/` and do not hand-write duplicate fakes in each test file.
 
 Use package boundaries and review rules to prevent modules from importing
 another module's concrete dependencies. A future microservice extraction will

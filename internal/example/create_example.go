@@ -12,23 +12,14 @@ func (d *dependencies) CreateExample(ctx context.Context, name string) (*Example
 		return nil, fmt.Errorf("create example: %w", ErrReservedName)
 	}
 
-	ex, err := d.store.CreateExample(ctx, name)
-	if err != nil {
-		return nil, fmt.Errorf("create example: %w", err)
-	}
-
-	return ex, nil
-}
-
-func (s *storeDependencies) CreateExample(ctx context.Context, name string) (*Example, error) {
 	ex := &Example{ID: uuid.NewString(), Name: name}
 
-	err := s.db.QueryRowContext(ctx,
+	err := d.db.QueryRowContext(ctx,
 		`INSERT INTO examples (id, name) VALUES (?, ?) RETURNING id, name, created_at`,
 		ex.ID, ex.Name,
 	).Scan(&ex.ID, &ex.Name, &ex.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("insert example: %w", err)
+		return nil, fmt.Errorf("create example: %w", err)
 	}
 
 	return ex, nil

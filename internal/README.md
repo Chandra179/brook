@@ -14,19 +14,15 @@ logic, application behavior, transport, and dependency wiring.
 
 | File | Purpose |
 |------|---------|
-| `interface.go` | The module's interfaces together: the provider-owned `Service` interface (what the module provides to real sibling consumers) and the package-private `store` interface (what it requires), each with its `var _ X = ...` compile-time assertion |
+| `interface.go` | The provider-owned `Service` interface (what the module provides to real sibling consumers), with its compile-time assertion |
 | `handler.go` | Module entrypoint — HTTP handlers |
 | `business_error.go` | Domain sentinels (plain `errors.New(...)`, no non-stdlib imports) |
 | `constant.go` | Unexported package constants |
-| `<action>.go` | One file per handler/operation (e.g. `create_example.go`); holds the `*dependencies`/store method implementations that would otherwise live in `service.go`/`store.go` |
+| `<action>.go` | One file per handler/operation (e.g. `create_example.go`); holds the `*dependencies` method and its persistence operation |
 
-There is no separate `service.go`/`store.go` — the `Service` and `store`
-interfaces live in `interface.go`, and implementations are split across
-per-action files like `create_example.go`. `Service` is exported only when a
-real sibling consumer needs it. `store` remains package-private because it is
-an implementation port. Mockery generates its test mock under `mocks/`; its
-method names are exported when an external generated mock must satisfy the
-private interface.
+There is no separate `service.go`/`store.go`; operation logic and persistence
+live in per-action files like `create_example.go`. `Service` is exported only
+when a real sibling consumer needs it.
 
 ## Cross-module communication
 
@@ -56,9 +52,7 @@ registration.
 
 Only add a `Service` interface for a real cross-module contract. Do not impose a
 universal one-public-interface rule: expose small provider-owned contracts when
-there are multiple meaningful consumers, and keep internal ports private.
+there are multiple meaningful consumers, and keep persistence concrete unless
+a real substitution boundary needs an interface.
 
-For tests, use the package-private `newDependencies` helper pattern (exposed
-to external tests only through `export_test.go`) to inject the Mockery-generated
-`store` mock. External sibling modules should mock the
-exported `Service` contract, not the provider's storage port.
+External sibling modules should mock the exported `Service` contract.
